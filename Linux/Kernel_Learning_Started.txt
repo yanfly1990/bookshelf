@@ -1,0 +1,3538 @@
+							Kernel Learning Started
+			An introduction to Linux kernel programming 
+			http://www.crashcourse.ca/introduction-linux-kernel-programming/lesson-1-building-and-running-new-linux-kernel
+		Lesson 1:Building and running a new Linux kernel
+				Preparation
+1. Install the git utility for version control and checkout:
+    yanxu@ubuntu:~$sudo apt-get install git-core
+	
+2. To use any of the kernel configuration targets, the Curses development library is needed
+    yanxu@ubuntu:~$sudo apt-get install libncurses5-dev
+							
+				Taking a look around the system at the existing kernel bits and pieces	
+1. uname
+    "uname" tells the running kernel.
+	yanxu@ubuntu:~$uname -a
+	    Linux ubuntu 3.19.0-25-generic #26~14.04.1-ubuntu SMP Fri Jul 24 21:16:20 UTC 2015 x86_64 x86_64 x86_64 GNU/Linux
+  
+2. The kernel image and initrd and config info 
+	/boot lists the boot-able kernel modules
+	yanxu@ubuntu:~$ls /boot
+	initrd.img-3.19.0-25-generic config-3.19.0-25-generic vmlinuz-3.19.0-25-generic
+   
+       vmlinuz-2.6.35-kwlug+: The compressed, boot-able kernel image
+	   
+       initrd.img-2.6.35-kwlug+: The initial ram disk -- an early root file-system that allows your kernel to bootstrap and get 
+     essential device drivers to get to the final, official root file-system
+	 
+       config-2.6.35-kwlug+: The record of the configuration parameters for that kernel   
+	   
+3. The kernel-specific loadable modules 
+	Each kernel installed on the system will have a corresponding directory of loadable modules to go with it.
+	yanxu@ubuntu:~$ls /lib/modules
+    3.19.0-25-generic
+   
+4. The GRUB configuration file
+		The last essential bit to booting to a new kernel is that you need to add an entry for the new kernel into 
+	the GRUB boot-loader configuration file on the system.
+	yanxu@ubuntu:~$cat /boot/grub/grub.config
+		Once you've built and installed all new kernel bits and pieces, you have to run the appropriate utility to
+	add entries for it to the GRUB config file.
+	
+				Getting the kernel source
+	yanxu@ubuntu:~$mkdir repo
+	yanxu@ubuntu:~$cd repo
+	yanxu@ubuntu:~/repo$git clone git://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+	or >git clone http://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git
+	Then there will have a /linux under /repo
+	yanxu@ubuntu:~/repo/linux$git checkout v3.19
+   
+                The configuration process
+   configure the kernel source tree: which involves selecting which features you want built into the eventual kernel
+   image, which features you want built as loadable module, and which features you want to omit entirely
+		Using the existing configuration file as the basis for your configuration.
+	yanxu@ubuntu:~/repo/linux$cp /boot/config-3.19.0-25-generic .config
+		The purpose of the normal configuration process is to take all your choices and generate that .config file. The
+	following command is used to tweak that config file to bring it into line with the kernel source:
+	yanxu@ubuntu:~/repo/linux$make oldconfig($yes '' | make oldconfig to skip hitting ENTER)
+	
+				Naming your new kernel
+    To give your kernel a unique identifier, simply edit the Makefile and change the value of the EXTRAVERSION variable
+	yanxu@ubuntu:~/repo/linux$vi Makefile
+	EXTRAVERSION = -crash(assignment of this EXTRAVERSION item: -crash)
+	
+				Doing the build
+    yanxu@ubuntu:~/repo/linux$make
+	Note: All of the "make" commands must be run from the top of the kernel source tree.
+
+				Installing your new kernel and modules
+   Install all of the newly-built modules, which should show up under a new directory under the /lib/modules directory
+   yanxu@ubuntu:~/repo/linux$sudo make modules_install
+       To save disk space, we can use the following command:
+   yanxu@ubuntu:~/repo/linux$sudo make INSTALL_MOD_STRIP=1 modules_install
+   
+   Install the new(compressed) kernel image into the /boot directory so that GRUB can find it at boot time
+   yanxu@ubuntu:~/repo/linux$sudo make install
+   
+   Create(somehow) a new initrd initial ram disk that goes along with that kernel to support the early part of the boot process
+   yanxu@ubuntu:~/repo/linux$sudo update-initramfs -c -k 3.19.0-crash+
+   
+   Run whatever command is appropriate to update the GRUB configuration file on the system to add entries for the new kernel so 
+   it can be selected from the GRUB menu at system startup
+   yanxu@ubuntu:~/repo/linux$sudo update-grub
+   
+   ******To start all over with a pristine source tree, remove every vestige(remnant) of the build with:
+   yanxu@ubuntu:~/repo/linux$sudo make distclean
+   
+   Verify that everything seems to have been installed properly by checking the following:
+       Does /boot directory have a new kernel, initrd image file and config file corresponding to the build?
+	   Is there a new modules directory for the kernel under /lib/modules?
+	   Has the GRUB configuration file been updated to include an entry or entries for the new kernel?
+	If all answers are yes, then reboot.
+	
+	            Reboot
+	yanxu@ubuntu:~/repo/linux$sudo reboot
+	
+	After reboot:
+	yanxu@ubuntu:~$uname -a
+	   Linux ubuntu 3.19.0-crash+ #1 SMP Mon Oct 31 21:44:39 PDT 2016 x86_64 x86_64 x86_64 GNU/Linux
+	
+		Lesson 2:Further issues in kernel configuration
+				So what's to configure?
+		Instead of using a cheating method to configure, we can use $make menuconfig to know the details of configuration.
+		$make menuconfig
+	
+	    Lesson 3:The care and feeding of loadable kernel modules(LKMs)
+                What's a loadable module, anyway?
+		A Linux loadable kernel module(LKM) is simply a compiled object file that you can load into kernel space, at which
+	point it's now just another part of the running kernel and provides some new functionality.
+		Anything which is running in kernel space takes up RAM, so the larger your kernel, the more RAM it's consuming. If 
+	you need some functionality only rarely, you can build that functionality as a loadable module and load it as needed.
+		In addition, loadable modules give you the opportunity of writing, say, a new device driver, then loading it, testing
+	it, identifying bugs, unloading it, fixing it, recompiling it, reloading it and so on, all without rebooting the system.
+		"module" and "device driver" is not the same thing. Loadable modules can be used not only for device drivers, but for 
+	other purposes: help debug the kernel.
+	
+				Does your kernel support loadable modules?
+		Certainly yes. If you wanted to, configure and build a kernel that had no module support whatsoever. In special cases
+	where you're building a tiny embedded system, you might want to configure a kernel with everything built in and no module
+	support whatsoever.
+	
+				The two names for a kernel module
+		A simple name(vfat) and an actual filename containing the loadable module code(vfat.ko), it depends on the expectation
+	of module commands.
+		The loadable modules used to be stored in files with a normal object suffix of .o. Now the file prefix is .ko, short for
+	"kernel object", otherwise known as a module.
+	
+				Your current kernel's modules
+		Reboot to the earlier version of "3.19.0-25-generic" to see the original results which comes with the Ubuntu distro.
+		
+		To see all the modules that came with the OS:
+		yanxu@ubuntu:~$ls /lib/modules
+		    3.19.0-25-generic 3.19.0-crash+
+		
+		To see which kernel version I'm running with:
+		yanxu@ubuntu:~$uname -a
+		    Linux ubuntu 3.19.0-25-generic #26~14.04.1-ubuntu SMP Fri Jul 24 21:16:20 UTC 2015 x86_64 x86_64 x86_64 GNU/Linux
+		
+		To recursively display all the available modules for the current kernel:
+		yanxu@ubuntu:~$cd /lib/modules/3.19.0-25-generic
+		yanxu@ubuntu:/lib/modules/3.19.0-25-generic$find . -name "*.ko"
+		    ./kernel/net/ipx/ipx.ko
+			./kernel/net/....
+			./kernel/ubuntu/...
+			./kernel/crypto/...
+			./kernel/mm/...
+			./kernel/fs/...
+			./kernel/drivers/...
+			... ...
+		
+		To get the version of running kernel with:
+		yanxu@ubuntu:~$uname -r
+		    3.19.0-25-generic
+		which is handy since you can automate generating the name of the appropriate modules directory with either of 
+		/lib/modules/`uname -r` or /lib/modules/$(uname -r). This is useful to remember since it allows you to write, say,
+		shell scripts that manipulate modules, knowing that no matter what kernel version you're running, you'll be accessing
+		the corresponding modules directory.
+		
+				Which modules are currently loaded?
+		Easy--there's the "lsmod" command:
+		yanxu@ubuntu:~$lsmod
+			Module           Size     Used by
+			joydev           20480       0
+			snd_ens1371      32768       0
+			hid_generic      16384       0
+			snd_ac97_codec   131072      1 snd_ens1371
+			... etc etc...
+		lsmod is a trivial program which nicely formats the contents of the /proc/modules [file], showing
+	what kernel modules are currently loaded.
+		yanxu@ubuntu:~$cat /proc/modules
+			joydev 20480 0-Live 0x0000000000000000
+			snd_ens1371 32768 0-Live 0x0000000000000000
+			hid_generic 16384 0-Live 0x0000000000000000
+			snd_ac97_codec 131072 1 snd_ens1371, Live 0x0000000000000000
+			...etc etc...
+			
+				Loading and unloading modules
+		From under the appropriate /lib/modules directory, experiment on the module that provides support for Btrfs filesystem,
+	kernel/fs/btrfs/btrfs.ko.
+	    Verify that module is not loaded , then load it, then check again:
+		yanxu@ubuntu:~$lsmod | grep btrfs
+		yanxu@ubuntu:~$sudo modprobe btrfs
+		yanxu@ubuntu:~$lsmod | grep btrfs
+		    btrfs     937984   0
+			xor        24576   1  btrfs
+			raid6_pq   98304   1  btrfs
+		Loading the module automatically dragged in its two dependencies that were not yet loaded. That's how modprobe works: it
+	examines the dependency information in the corresponding modules.dep file for the running kernel.
+	    Another two older utilities for loading and unloading modules -- "insmod" and "rmmod"(they aren't sophisticated and don't
+	handle dependencies, so we're going to avoid them for now.) But they will suddenly become important when we start loading 
+	and unloading the modules we write.
+	
+	            Poking at a module with "modinfo"
+		To know about the attributes of a particular module:
+		yanxu@ubuntu:~$modinfo btrfs
+		    filename: /lib/modules/3.19.0-25-generic/kernel/fs/btrfs/btrfs.ko
+			license:  GPL
+			alias:    devname:btrfs-control
+			alias:    char-major-10-234
+			alias:    fs-btrfs
+			srcversion:...
+		    depends:  raid6_pq, xor
+			...
+		It lists the module's dependencies. And it doesn't matter if the module is loaded or not.
+		
+		        Loadable modules and the kernel address space
+		Future lessons are going to get into working in the kernel address space, and which symbols are available in that address
+	and which aren't, and how loading your module affects what gets added. 
+	    To look at the kernel address space symbol table:
+		yanxu@ubuntu:~$less /proc/kallsyms
+		    0000000000000000   A   irq_stack_union
+			0000000000000000   A   __per_cpu_start
+			0000000000000000   A   exception_stacks
+			......
+		This listing represents the various types of symbols and their corresponding addresses in the kernel address space.
+				fgrep '[' /proc/kallsyms | awk '{print $4}' | uniq -c
+				This shows how many symbols are brought in by each loaded module.
+		
+		Lesson 4: Writing and running your first kernel module
+				What software do you need to install?
+		At a bare minimum, you'll want the standard development tools such as gcc, make, assemblers, linkers and
+	the like.
+		yanxu@ubuntu:~$sudo apt-get install build-essential
+		
+				The crash1(the first module's name) module
+		yanxu@ubuntu:~$mkdir modules_yan
+		yanxu@ubuntu:~$cd modules_yan
+		yanxu@ubuntu:~/modules_yan$mkdir crash1
+		yanxu@ubuntu:~/modules_yan$cd crash1
+		yanxu@ubuntu:~/modules_yan/crash1$touch crash1.c
+		yanxu@ubuntu:~/modules_yan/crash1$vi crash1.c
+			/*Module source file 'crash1.c'.*/
+			#include <linux/module.h>
+			#include <linux/init.h>
+			#include <linux/kernel.h>
+			
+			static int hi(void)
+			{
+				printk(KERN_INFO "crash1 module being loaded.\n");
+				return 0;
+			}
+			
+			static void bye(void)
+			{
+				printk(KERN_INFO "crash1 module being unloaded.\n");
+			}
+			
+			module_init(hi);
+			module_exit(bye);
+			
+			MODULE_AUTHOR("Yan Xu");
+			MODULE_LICENSE("Ubuntu");
+			MODULE_DESCRIPTION("Doing a whole lot of nothing.");
+		
+		yanxu@ubuntu:~/modules_yan/crash1$touch Makefile
+		yanxu@ubuntu:~/modules_yan/crash1$vi Makefile
+			ifeq ($(KERNELRELEASE),)
+			
+			KERNELDIR ?= /lib/modules/$(shell uname -r)/build
+			PWD := $(shell pwd)
+			
+			.PHONY: build clean
+			
+			build:
+				$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
+				
+			clean:
+				rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c
+				
+			else
+			
+			$(info Building with KERNELRELEASE = ${KERNELRELEASE})
+			obj-m := crash1.o
+			
+			endif
+			
+			The Makefile will be run twice, and it will run differently based on which of the two phases is being executed.
+			When you run the "make" command locally in your directory, the first thing that happens in that Makefile is that
+		the variable KERNELRELEASE is tested for being empty, simply because nothing has set it yet. And based on this, the 
+		first part of the Makefile is processed. What the first part does is to identify where to find the current kernel's
+		source tree(/lib/modules/$(shell uname -r)/build), and here's the magic--the Makefile invokes the top-level Makefile
+		of the kernel source tree, passing an argument that tells it where to come back to in order to build a module.
+		    ***The kernel source tree contains the entire build infrastructure that knows how to compile kernel modules. All 
+		you're doing is invoking that Makefile with enough information to tell it where you would like it to visit to build
+		your local module.
+		    Once you make the call, the kernel Makefile will set a number of variables to help in the compilation process,
+		including KERNELRELEASE, which means that when your Makefile is invoked a second time, the second half of it is processed.
+		    The second part of the Makefile is to tell the kernel Makefile what it is you want it to compile.
+			
+		yanxu@ubuntu:~/modules_yan/crash1$make
+			make -C /lib/modules/3.19.0-25-generic/build M=/home/yanxu/modules_yan/crash1 modules  
+			make[1]: Entering directory `/usr/src/linux-headers-3.19.0-25-generic'
+			Building with KERNELRELEASE = 3.19.0-25-generic
+				CC [M]  /home/yanxu/modules_yan/crash1/crash1.o
+				Building modules, stage 2.
+			Building with KERNELRELEASE = 3.19.0-25-generic
+				MODPOST 1 modules
+				CC      /home/yanxu/modules_yan/crash1/crash1.mod.o
+				LD [M]  /home/yanxu/modules_yan/crash1/crash1.ko
+			make[1]: Leaving directory `/usr/src/linux-headers-3.19.0-25-generic'
+		yanxu@ubuntu:~/modules_yan/crash1$ls
+			crash1.c crash1.ko crash1.mod.c crash1.mod.o crash1.o Makefile modules.order Module.symvers
+			
+		"crash1.ko" means the success of compiling the first kernel module.
+     		
+				The loading and unloading of it all
+		yanxu@ubuntu:~/modules_yan/crash1$file crash1.ko
+			crash1.ko: ELF 64-bit LSB relocatable, x86-64, version 1 (SYSV), BuildID[sha1]=2cd3cc3b28087b7a71f0
+			bc6a60d2e7c6a52c4075, not stripped
+		yanxu@ubuntu:~/modules_yan/crash1$sudo insmod crash1.ko    [load it]
+		yanxu@ubuntu:~/modules_yan/crash1$lsmod | grep crash1	   [verify the loading]
+			crash1       16384       0
+		yanxu@ubuntu:~/modules_yan/crash1$sudo rmmod crash1        [unload it]
+		yanxu@ubuntu:~/modules_yan/crash1$lsmod | grep crash1      [No module item]
+		
+		        Kernel programming versus userspace programming
+		Kernel programming is dealing with an entirely different development and execution environment, provided by the kernel.
+		At the top level of the source tree, include/ directory -- a major source of kernel header files.
+		lib/ directory -- the kernel library routines.
+		The only thing that's common between kernel programming and userspace programming is using the standard development
+	tools, such as make and gcc, but working environment is totally new.
+	
+	            The module build environment
+		The simple act of compiling the new module requires a wholly new build environment (with new header files and new
+	library routines and so on). The environment is supplied by the kernel source tree.
+	    What the Makefile does is to note the source file that you want to compile(crash1.c), at which point it follows a 
+	reference to where it can find a kernel source tree that contains everything required to build a module, at which point
+	you've supplied enough information for the kernel build infrastructure to come back to the module and compile it properly.
+	
+	            So where's that kernel source tree you need?
+		To compile even the simplest kernel module, you need a kernel source tree somewhere against which to compile it.
+		All you really need from the kernel tree are the header files, the library routines and the internal build infrastructure.
+		See something under /usr/src directory.
+		yanxu@ubuntu:~/modules_yan/crash1$ ls /usr/src
+		    linux-headers-3.19.0-25     linux-headers-3.19.0-25-generic
+		yanxu@ubuntu:~/modules_yan/crash1$ls -l /lib/modules/$(uname -r)
+		    lrwxrwxrwx    1   root   root     40    Oct 31   02:52    build -> /usr/src/linux-headers-3.19.0-25-generic
+			... ...
+		A symbolic link to the corresponding kernel headers.
+		
+	    Lesson 5: Details, details, details...
+                Using a read-only kernel source tree
+		In short, multiple kernel programmers can all be compiling their modules against the same source tree with no fear of conflict.
+		
+		        insmod and rmmod and modprobe
+		modprobe is the more sophisticated of the module management commands in that it understands dependencies and will generally
+	do the right thing in terms of loading all the appropriate modules.
+	    When you build your own modules, however, you'll use the simpler and older insmod and rmmod commands, which don't understand
+	dependencies and accept as arguments only .ko files.
+	
+	            And modinfo? What about modinfo?
+		Just as you used modinfo to query system-supplied modules that you loaded with modprobe, it will list the dependencies.
+		
+		Lesson 6: Using git and working with custom kernels
+		1. >git pull a new version of kernel source tree(directory: ~/k/git)
+		2. $make distclean (to clean out any remnants of previous configurations or builds you might have run)
+		3. clean out the module directory with:
+		    $make clean
+		4. rebuild the module while overriding the kernel source tree location with:
+		    $make KERNELDIR=~/k/git
+			There's still a catch:
+			    make -C /home/rpjday/k/git M=/home/rpjday/courses/crash/lkp/crash1   modules  
+                make[1]: Entering directory `/home/rpjday/k/git'
+                ERROR: Kernel configuration is invalid.
+                include/generated/autoconf.h or include/config/auto.conf are missing.
+                Run 'make oldconfig && make prepare' on kernel src to fix it.
+                ... snip ...
+				
+			You can't build a module against an absolutely sterile, pristine, make distcleaned kernel tree. At the very least, the 
+		kernel tree being used must be configured because there are some visioning files that are created by the configuration process
+		that are essential to the module build process.
+		    There's is a need to perform at least the first part of the kernel process since that will generate a few more files that 
+		the module build process needs. You don't need to perform an entire build. In the kernel source tree, to run:
+            $make modules_prepare
+
+        Then $make KERNELDIR=~/k/git
+            make -C /home/rpjday/k/git M=/home/rpjday/courses/crash/lkp/crash1   modules  
+            make[1]: Entering directory `/home/rpjday/k/git'
+
+            WARNING: Symbol version dump /home/rpjday/k/git/Module.symvers is missing; modules will have no dependencies and modversions.
+
+            Building with KERNELRELEASE = 2.6.35-rc3
+                CC [M]  /home/rpjday/courses/crash/lkp/crash1/crash1.o
+                Building modules, stage 2.
+            Building with KERNELRELEASE = 2.6.35-rc3
+                MODPOST 1 modules
+                CC      /home/rpjday/courses/crash/lkp/crash1/crash1.mod.o
+                LD [M]  /home/rpjday/courses/crash/lkp/crash1/crash1.ko
+            make[1]: Leaving directory `/home/rpjday/k/git'	
+        5. load the kernel(Since you built that module against a different kernel version)
+            $sudo insmod crash1.ko
+                insmod: error inserting 'crash1.ko': -1 Invalid module format
+        6. 	Conclusion: the distro-specific kernel headers package installed on the system that lets you compile modules against 
+		it clearly represents at least that much of a configured kernel source tree; it can't just be pure source or you would
+		have run into exactly the same failure as you just saw.
+		
+		Lesson [INTERMISSION]: Building a "vmlinux" file under Ubuntu
+			Pre-study: On Linux systems, vmlinux is a statically linked executable file that contains the Linux kernel in one of 
+		the object file formats supported by Linux, which includes ELF, COFF and a.out. The vmlinux file might be required for 
+		kernel debugging, symbol table generation or other operations, but must be made bootable before being used as an operating
+		system kernel by adding a multiboot header, bootsector and setup routines.
+		
+		        What's the big deal about a vmlinux file?
+		For the purposes of kernel debugging, it's sometimes useful to have on hand the raw, uncompressed vmlinux file that corresponds
+	to the running kernel. More specifically, it's useful to have a vmlinux file that's been configured with the kernel settings
+	CONFIG_PROC_KCORE and CONFIG_DEBUG_INFO.
+	    vmlinux file is generated as part of the build process, and you can find it at the top of the kernel source tree once the build
+	is done.
+	    The following steps is to build and boot a new kernel which can work with the kernel that's currently running. Much 
+	of what follows is based on the Ubuntu kernel compilation page(https://help.ubuntu.com/community/Kernel/Compile).
+		
+		        Install the build tools
+	    The Ubuntu adds an entire extra layer of build infrastructure to the standard kernel source tree, so need to install
+	all the necessary utilities:
+	    yanxu@ubuntu:~$sudo apt-get build-dep linux-image-$(uname -r)
+	    
+		        Getting the source tree
+		yanxu@ubuntu:~$mkdir repo_ubuntu
+		yanxu@ubuntu:~$cat /etc/lsb-release
+		    DISTRIB_ID=Ubuntu
+			DISTRIB_RELEASE=14.04
+			DISTRIB_CODENAME=trusty
+			DISTRIB_DESCRIPTION="Ubuntu 14.04.3 LTS"
+		yanxu@ubuntu:~/repo_ubuntu$git clone git://kernel.ubuntu.com/ubuntu/ubuntu-trusty.git
+		whereupon you'll end up with a ubuntu-trusty directory that contains not just a standard kernel source tree, but quite
+	a lot of Ubuntu additions.
+	
+	            Building the vmlinux file
+		yanxu@ubuntu:~/repo_ubuntu/ubuntu-trusty$sudo apt-get install fakeroot
+		
+		Clean the source in preparation for the build:
+		    yanxu@ubuntu:~/repo_ubuntu/ubuntu-trusty$fakeroot debian/rules clean
+		Start the build:
+		    yanxu@ubuntu:~/repo_ubuntu/ubuntu-trusty$fakeroot debian/rules binary-generic
+		Find the (sizable) vmlinux file:
+		    yanxu@ubuntu:~/repo_ubuntu/ubuntu-trusty$ls -l debian/build/build-generic/vmlinux
+			    ... 159076924  Nov 23 19:15   debian/build/build-generic/vmlinux
+			yanxu@ubuntu:~/repo_ubuntu/ubuntu-trusty$file debian/build/build-generic/vmlinux
+			    debian/build/build-generic/vmlinux: ELF 64-bit LSB executable, x86-64, version 1(SYSV), statically linked, BuildID
+				[sha1] =..., not stripped
+				
+				About the config file ...
+		The whole reason for building a vmlinux file in the first place is to have an unstripped, uncompressed kernel image that 
+	you can use later for debugging the running kernel. CONFIG_PROC_KCORE and CONFIG_DEBUG_INFO are automatically configured if
+	you build a default Ubuntu kernel, it's in debian/build/build-generic/.config.
+	    When using Ubuntu's build infrastructure, the config file used is constructed hierarchically, based on the following files:
+		    * ./debian.master/config/config.common.ubuntu
+		    * ./debian.master/config/amd64/config.common.amd64
+			* ./debian.master/config/amd64/config.flavour.generic
+		Unsurprisingly, the more specific file settings override the more generic ones.
+		It's easy to check that the config file used for the build is equivalent to the one in /boot:
+		    yanxu@ubuntu:~/repo_ubuntu/ubuntu-trusty$diff debian/build/build-generic/.config /boot/config-3.19.0-25-generic
+			    For I don't check out the identical version, so my vmlinux version is 3.13.0-101-generic.
+				
+		If you update your Ubuntu system to a new kernel, it should be easy to see how to rebuild your vmlinux file accordingly.
+	Just clean the result of the current build with:
+	    yanxu@ubuntu:~/repo_ubuntu/ubuntu-trusty$fakeroot debian/rules clean
+		
+		Lesson 7: Modules coming and going
+		        New crash2 module
+		yanxu@ubuntu:~/modules_yan$mkdir crash2
+		yanxu@ubuntu:~/modules_yan/crash2$touch crash2.c
+			/* Module source file 'crash2.c'. */
+			#include <linux/module.h>
+			#include <linux/init.h>
+			#include <linux/kernel.h>
+
+			static int __init hi(void)
+			{
+				printk(KERN_INFO "crash2 module being loaded.\n");
+				return 0;
+			}
+
+			static void __exit bye(void)
+			{
+				printk(KERN_INFO "crash2 module being unloaded.\n");
+			}
+
+			module_init(hi);
+			module_exit(bye);
+
+			MODULE_AUTHOR("Yan Xu");
+			MODULE_LICENSE("Ubuntu");
+			MODULE_DESCRIPTION("Doing a whole lot of nothing.");
+		yanxu@ubuntu:~/modules_yan/crash2$touch Makefile
+			ifeq ($(KERNELRELEASE),)
+
+			KERNELDIR ?= /lib/modules/$(shell uname -r)/build
+			PWD := $(shell pwd)
+
+			.PHONY: build clean
+
+			build:
+				$(MAKE) -C $(KERNELDIR) M=$(PWD) modules
+
+			clean:
+				rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c
+				rm -f modules.order Module.symvers
+
+			else
+
+			$(info Building with KERNELRELEASE = ${KERNELRELEASE})
+			obj-m :=    crash2.o
+
+			endif
+		Note: all the indentation in the Makefile must be a single TAB character and not spaces.
+		
+		yanxu@ubuntu:~/modules_yan/crash2$make 
+		yanxu@ubuntu:~/modules_yan/crash2$sudo insmod crash2.ko  [load the module]
+		yanxu@ubuntu:~/modules_yan/crash2$sudo rmmod crash2      [unload the module]
+		yanxu@ubuntu:~/modules_yan/crash2$sudo tail -f /var/log/kern.log(or $dmesg | tail -3)
+			...skip...
+			Nov 24 17:36:45 ubuntu kernel: [203574.811593] crash2 module being loaded.
+			Nov 24 17:37:10 ubuntu kernel: [203599.854264] crash2 module being unloaded.
+		
+				Printing "Hello, world"
+		...
+		printk(KERN_INFO "crash2 module being loaded.\n");
+		...
+		printk(KERN_INFO "crash2 module being unloaded.\n");
+		...
+		When you load and unload the module, nothing shows up on the screen. Once your module is loaded, it's running in kernel
+	space and has little association with user space, so anything printed is not going to show up at the terminal, for the simple
+	reason that your module has no association with your terminal any more.
+		Instead, the print above shows up in the system log file, "tail -f /var/log/kern.log".
+		
+		        Module entry and exit code
+		static int __init(){} and static void __exit() funcs
+		__init() is executed at module load time. __exit() is executed at module unload time.
+		__init() needs to do a fair bit of initialization including things like allocating memory, registering device nodes, 
+	initializing hardware and so on.
+		__exit() exit routine is responsible for undoing all of the above work--unregistering devices, freeing allocated memory
+	and so on, which brings us to the cardinal rule of module init and exit routines.
+		***Your exit routine is responsible for undoing everything done by the init routine.
+		***Pay attention to deallocating memory dynamically allocated earlier.[The thinking of "once the program ends, the
+	operating system will take care of all of that" should not exist especially for kernel space working.]
+		For kernel space programming, if you do something in the entry code, it's your responsibility to undo it on your way 
+	out. No one is going to be checking your code and cleaning up after you. If you leave devices running or memory allocated,
+	all of that stays there until the system is rebooted. 
+		
+				Detecting errors in the entry code
+		In the module's entry code, you should check every return code and deal with the failure accordingly.
+		If everything just works well, it will return 0. "return 0;"
+		For the return values, 0 --- everything appears to have worked well and the module is ready to be fully loaded.
+	A negative integer value from init routine shows something has gone wrong and the module can't be loaded.
+	
+				The sordid details of module load failure
+		static int __init hi(void)
+		{
+			int err;
+			/* registration takes a pointer and a name */
+			err = register_this(ptr1, "rday");
+			if (err) goto fail_this;
+			err = register_that(ptr2, "rday");
+			if (err) goto fail_that;
+			err = register_those(ptr3, "rday");
+			if (err) goto fail_those;
+			return 0; /* success */
+
+			fail_those: unregister_that(ptr2, "rday");
+			fail_that: unregister_this(ptr1, "rday");
+			fail_this: return err; /* propagate the error */
+		}
+
+		static void __exit bye(void)
+		{
+			unregister_those(ptr3, "rday");
+			unregister_that(ptr2, "rday");
+			unregister_this(ptr1, "rday");
+			return;
+		}
+		The above is one variation of how some programmers do that. Another variation is to put all the exit code in a separate
+	routine and have both the entry and exit routines call that. 
+		Refer to main source file for Btrfs filesystem, fs/btrfs/super.c. The entry and exit code can be typically found at the 
+	bottom of the main source file for that feature.
+	
+				And what about those negative return codes?
+		$cat ~/repo/linux/include/uapi/asm-generic/errno-base.h
+			#define EPERM            1      /* Operation not permitted */
+			#define ENOENT           2      /* No such file or directory */
+			#define ESRCH            3      /* No such process */
+			#define EINTR            4      /* Interrupted system call */
+			...
+		$cat ~/repo/linux/include/uapi/asm-generic/errno.h			
+			#define EDEADLK         35      /* Resource deadlock would occur */
+			#define ENAMETOOLONG    36      /* File name too long */
+			...
+		Usage: return -ENOMEM;
+		
+		Lesson 8: Module diagnostics, and that init and exit code again.
+				Moving on to crash3...
+		yanxu@ubuntu:~/modules_yan$mkdir crash3
+		yanxu@ubuntu:~/modules_yan/crash3$touch crash3.c
+            /* Module source file 'crash3.c'. */
+
+            #include <linux/module.h>   // for all modules
+            #include <linux/init.h>     // for entry/exit macros
+            #include <linux/kernel.h>   // for printk() definition
+            #include <asm/current.h>    // process information
+            #include <linux/sched.h>    // for task_struct definition
+
+            static int __init hi(void)
+            {
+                printk(KERN_INFO "crash3 module being loaded.\n");
+                printk(KERN_INFO "User space process is '%s'\n", current->comm);
+                printk(KERN_INFO "User space PID is  %i\n", current->pid);
+                return 0;
+            }
+
+            static void __exit bye(void)
+            {
+                printk(KERN_INFO "crash3 module being unloaded.\n");
+            }
+
+            module_init(hi);
+            module_exit(bye);
+
+            MODULE_AUTHOR("Yan Xu");
+            MODULE_LICENSE("Ubuntu");
+            MODULE_DESCRIPTION("Doing a whole lot of nothing.");
+        yanxu@ubuntu:~/modules_yan/crash3$touch Makefile
+            The content of Makefile is the same with the Makefile of module crash2.ko	
+		yanxu@ubuntu:~/modules_yan/crash3$sudo insmod crash3.ko
+		yanxu@ubuntu:~/modules_yan/crash3$sudo rmmod crash3
+		yanxu@ubuntu:~/modules_yan/crash3$dmesg | tail -5
+		    ...
+			...   crash3 module being loaded.
+			...   User space process is 'insmod'
+			...   User space PID is 2785
+			...   crash3 module being unloaded
+		
+				What's your module output going?
+		printk() is equivalent to printf(). kernel log messages can be generated with a variety of priorities defined in 
+	"~/repo/linux/include/linux/kern_levels.h"
+			#define KERN_EMERG   KERN_SOH "0"   /* system is unusable                */
+			#define KERN_ALERT   KERN_SOH "1"   /* action must be taken immediately  */
+			#define KERN_CRIT    KERN_SOH "2"   /* critical conditions               */
+			#define KERN_ERR     KERN_SOH "3"   /* error conditions                  */
+			#define KERN_WARNING KERN_SOH "4"   /* warning conditions                */
+			#define KERN_NOTICE  KERN_SOH "5"   /* normal but significant condition  */
+			#define KERN_INFO    KERN_SOH "6"   /* informational                     */
+			#define KERN_DEBUG   KERN_SOH "7"   /* debug-level messages              */
+		The priorities are the same with the ones being used to configure the system log messages.
+		On Ubuntu, the facility is rsyslog and the configuration file is /etc/rsyslog.d/50-default.conf
+			...
+			auth,authpriv.*                 /var/log/auth.log
+			*.*;auth,authpriv.none          -/var/log/syslog
+			#cron.*                         /var/log/cron.log
+			daemon.*                        -/var/log/daemon.log
+			kern.*                          -/var/log/kern.log
+			lpr.*                           -/var/log/lpr.log
+			mail.*                          -/var/log/mail.log
+			user.*                          -/var/log/user.log
+			...
+			*.=debug;\
+				auth,authpriv.none;\
+				news.none;mail.none     -/var/log/debug   //in my file, this one is commented out
+			*.=info;*.=notice;*.=warn;\
+				auth,authpriv.none;\
+				cron,daemon.none;\
+				mail,news.none          -/var/log/messages //in my file, this one is commented out
+			...
+		If modifying the configuration file, then $/etc/init.d/rsyslog restart
+			
+				And about those entry and exit routines ...
+		__init and __exit qualifiers: __init qualifier is the simpler; it identifies any routine that can be discarded once 
+	the module's initialization code has executed, it has no further value and it can be thrown away.
+		__exit qualifier needs to stick around until unloading. But there are 2 situations where the exit code can be discarded,
+	and both of those situations represent cases where you know for a fact that that exit code will never, ever, ever be called.
+		The first case is when you've simply configured a kernel that doesn't support module unloading.
+		The second case is if you eventually add your module code into the kernel source tree and add configuration information 
+	for it. If you then choose to add that feature to your kernel as a loadable module, then the exit code has to stay. 
+	On the other hand, if you choose to build that feature directly into the kernel, then it's not a loadable module any more 
+	and the exit code will again never have a chance of executing.
+		***Every module should have an exit routine.
+		If you delete the exit routine of the module, it will be permanent. If you want to get rid of it, a.reboot the system
+	b. rmmod -f [module name](If the kernel doesn't support forced module unloading, it will fail.)
+	
+				RTFS: Read The Fine Source
+		The details of module management: ~/repo/linux/kernel/module.c
+			...
+			if (mod->init != NULL && mod->exit == NULL) {
+				printed_something = 1;
+				seq_printf(m, "[permanent],");
+			}
+			...
+			if (mod->init && !mod->exit) {
+				forced = try_force_unload(flags);
+				if (!forced) {
+					/* This module can't be removed */
+					ret = -EBUSY;
+					goto out;
+				}
+			}
+			...
+		**Note 1:
+			how can you verify that the kernel doesn't support forced module unloading?
+			- By checking into /boot/config-2.6.32-23-generic to see if CONFIG_MODULE_FORCE_UNLOAD is set.
+			$less config-3.19.0-25-generic | grep CONFIG_MODULE_FORCE_UNLOAD
+				# CONFIG_MODULE_FORCE_UNLOAD is not set
+		**Note 2:
+			[Lesson 3]To look at the kernel address space symbol table:
+			$ grep crash3 /proc/kallsyms
+				00000000 t bye	[crash3]
+				00000000 d __this_module	[crash3]
+				00000000 t cleanup_module	[crash3]
+			After the module's loaded, "bye()" is still around, but "hi()" has been removed by the __init directive.
+			
+		Lesson 9: All about module parameters
+				So what's a module parameter?
+		It is able to define command-line, load time parameters for the module that allow you to customize its behaviour. For 
+	instance, you might want to define a debugging setting that forces the module to generate additional debugging information 
+	to the appropriate log file as it runs, such that loading that module would look something like this:
+		$sudo insmod [mymodule.ko] debug=1
+
+		        Your spanking new crash4 module
+		yanxu@ubuntu:~/modules_yan/crash4$touch crash4.c
+		    /* Module source file 'crash4.c'. */
+
+            #include <linux/module.h>   // for all modules
+            #include <linux/init.h>     // for entry/exit macros
+            #include <linux/kernel.h>   // for printk() definition
+
+            static int __init crash4_hi(void)
+            {
+                printk(KERN_INFO "crash4 module being loaded.\n");
+                return 0;
+            }
+
+            static void __exit crash4_bye(void)
+            {
+                printk(KERN_INFO "crash4 module being unloaded.\n");
+            }
+
+            module_init(crash4_hi);
+            module_exit(crash4_bye);
+
+            MODULE_AUTHOR("Yan Xu");
+            MODULE_LICENSE("Ubuntu");
+            MODULE_DESCRIPTION("Testing module parameters.");
+		yanxu@ubuntu:~/modules_yan/crash4$modinfo crash4.ko
+		    ... ...
+		Everything looks good, so let's load it and see what shows up in the kernel symbol table:
+		    yanxu@ubuntu:~/modules_yan/crash4$sudo insmod crash4.ko
+		    yanxu@ubuntu:~/modules_yan/crash4$grep crash4 /proc/kallsyms
+			    0000000000000000  t  crash4_bye     [crash4]
+				0000000000000000  d  __this_module  [crash4]
+				0000000000000000  t  cleanup_module [crash4]
+			The module's exit routine can be seen here, the entry routine is missing as we tagged it with the qualifier __init,
+		it was discarded after loading.
+		
+		        The answer is always 42
+		Extend the crash4 module  with a simple static (that is, local) variable like this:
+		    ... snip ...
+            static int answer = 42;
+
+            static int __init crash4_hi(void)
+            {
+                printk(KERN_INFO "crash4 module being loaded.\n");
+                printk(KERN_INFO "Initial value of answer = %d.\n", answer);
+                return 0;
+            }
+
+            static void __exit crash4_bye(void)
+            {
+                printk(KERN_INFO "crash4 module being unloaded.\n");
+                printk(KERN_INFO "Final value of answer = %d.\n", answer);
+            }
+            ... snip ...
+		    yanxu@ubuntu:~/modules_yan/crash4$make
+			yanxu@ubuntu:~/modules_yan/crash4$sudo insmod crash4.ko
+			yanxu@ubuntu:~/modules_yan/crash4$sudo rmmod crash4
+			yanxu@ubuntu:~/modules_yan/crash4$dmesg | tail -4
+			    ... crash4 module being loaded.
+                ... Initial value of answer = 42.
+                ... crash4 module being unloaded.
+                ... Final value of answer = 42.
+			
+			    Defining your first parameter
+		Turn that static variable into a module parameter:
+		    #include <linux/module.h>
+            #include <linux/moduleparam.h>    // This is new for parameters.
+            #include <linux/init.h>
+            #include <linux/kernel.h>
+
+            static int answer = 42;
+
+            module_param(answer, int, 0644);
+            MODULE_PARM_DESC(answer, "Life, the universe, etc.");
+		yanxu@ubuntu:~/modules_yan/crash4$make
+		yanxu@ubuntu:~/modules_yan/crash4$modinfo crash4.ko
+			...
+			parm:           answer:Life, the universe, etc. (int)
+		    yanxu@ubuntu:~/modules_yan/crash4$sudo insmod crash4.ko
+			yanxu@ubuntu:~/modules_yan/crash4$sudo rmmod crash4
+			yanxu@ubuntu:~/modules_yan/crash4$dmesg | tail -4
+			    ... crash4 module being loaded.
+                ... Initial value of answer = 42.
+                ... crash4 module being unloaded.
+                ... Final value of answer = 42.
+			Or
+		    yanxu@ubuntu:~/modules_yan/crash4$sudo insmod crash4.ko answer=43
+			yanxu@ubuntu:~/modules_yan/crash4$grep crash4 /proc/kallsyms
+			    0000000000000000  d  answer             [crash4]
+				0000000000000000  t  crash4_bye         [crash4]
+				0000000000000000  r  __param_answer     [crash4]
+				0000000000000000  r  __param_str_answer [crash4]
+				0000000000000000  d  __this_module      [crash4]
+				0000000000000000  t  cleanup_module     [crash4]
+			yanxu@ubuntu:~/modules_yan/crash4$sudo rmmod crash4
+			yanxu@ubuntu:~/modules_yan/crash4$dmesg | tail -4
+			    ... crash4 module being loaded.
+                ... Initial value of answer = 43.
+                ... crash4 module being unloaded.
+                ... Final value of answer = 43.
+				
+				Module parameters and the /sys filesystem
+		yanxu@ubuntu:~/modules_yan/crash4$sudo insmod crash4.ko
+		yanxu@ubuntu:~/modules_yan/crash4$tree /sys/module/crash4
+		    /sys/module/crash4
+			|-- coresize
+            |-- holders  (dir)
+			|-- initsize
+            |-- initstate
+            |-- notes     (dir)
+            |-- parameters(dir)
+            |   `-- answer
+            |-- refcnt
+            |-- sections  (dir)
+            |   `-- __param
+            |-- srcversion
+			|-- taint
+			`-- uevent
+
+            4 directories, 5 files
+		Specifically, display the parameter "answer" with:
+		    yanxu@ubuntu:~/modules_yan/crash4$cat /sys/module/crash4/parameters/answer
+			    42
+			
+			    Changing module parameters on the fly (changing the parameter after loading)
+	    In addition to simply examining the values of module parameters as above, you might also be able to modify them on the fly,
+	depending on the permissions you defined the parameter with:
+	    static int answer = 42;
+        module_param(answer, int, 0644);
+		The access mode "0644" means read/write for owner, read for group and others.
+		yanxu@ubuntu:~/modules_yan/crash4$ ls -l /sys/module/crash4/parameters/answer 
+            -rw-r--r-- 1 root root ... /sys/module/crash4/parameters/answer
+			
+		If you happen to be root user, you can do like this to modify the parameter:
+		    $ echo 43 > /sys/module/crash4/parameters/answer
+            $ cat /sys/module/crash4/parameters/answer
+                43
+		If you don't have root privilege, you can use sudo:
+		    $ sudo echo 43 > /sys/module/crash4/parameters/answer 
+                bash: /sys/module/crash4/parameters/answer: Permission denied
+		In this situation, sudo is not enough, you can do like this to get legitimate root privilege:
+		    yanxu@ubuntu:~/modules_yan/crash4$ sudo sh -c "echo 43 > /sys/module/crash4/parameters/answer"
+			yanxu@ubuntu:~/modules_yan/crash4$ cat /sys/module/crash4/parameters/answer
+				43
+		
+		If you don't like using octal values "0644" to represent the parameter permissions, you can include the kernel header
+	file: #include <linux/stat.h>
+		and take advantage of the OR-compatible bitwise macro definition in that file:
+	            #define S_IRWXU 00700
+				#define S_IRUSR 00400
+				#define S_IWUSR 00200
+				#define S_IXUSR 00100
+
+				#define S_IRWXG 00070
+				#define S_IRGRP 00040
+				#define S_IWGRP 00020
+				#define S_IXGRP 00010
+
+				#define S_IRWXO 00007
+				#define S_IROTH 00004
+				#define S_IWOTH 00002
+				#define S_IXOTH 00001
+		If you define a parameter as being writeable, then, yes, you will be able to modify it from user space but ***your module
+	will not be informed that such a change has occurred. Make sure you appreciate what this means -- when you change that parameter,
+	there is no callback or notification mechanism that informs your module of that; the module simply sees a different value the 
+	next time it accesses that variable.
+	
+				The variety of module parameter types
+		There are a number of other types including uint, byte, short, ushort, pointers, character strings and more. To see the full
+	list, peruse the kernel header file "include/linux/moduleparam.h".
+		***An excellent way to understand any kernel feature is to scan the kernel source tree looking for examples of its usage. 
+	Assuming that your system has the module "usbhid", use "modinfo" to check its properties, then examine its source file under 
+	"drivers/hid/usbhid/hid-core.c" to examine its parameters, and compare what you see with what's under the "/sys" directory.
+		
+		Lesson 10: The kernel symbol table, and why you should care
+				What's all this "symbol" stuff, anyway?
+		crash_syms.c
+		#include <linux/module.h>
+        #include <linux/init.h>
+        #include <linux/kernel.h>
+        #include <linux/jiffies.h>  // for "jiffies" variable
+
+        static int __init syms_in(void)
+        {
+            printk(KERN_INFO "module crash_syms being loaded.\n");
+            printk("Current jiffies: %lu.\n", jiffies);
+            return 0;
+        }
+
+        static void __exit syms_out(void)
+        {
+            printk(KERN_INFO "module crash_syms being unloaded.\n");
+        }
+
+        module_init(syms_in);
+        module_exit(syms_out);
+
+        MODULE_AUTHOR("Yan Xu");
+        MODULE_LICENSE("Ubuntu");
+        MODULE_DESCRIPTION("Symbols, exported and otherwise.");
+		The jiffies variable, a counter that keeps track of the number of system ticks and is based on the frequency of the 
+	system timer.
+	    $dmesg | tail -3
+		    ...
+            ... module crash_syms being loaded.
+            ... Current jiffies: 4308031630.
+            ... module crash_syms being unloaded.
+            ...
+            ... module crash_syms being loaded.
+            ... Current jiffies: 4308039687.
+            ... module crash_syms being unloaded.
+            ...
+		And if we want to verify the system tick rate, we can type in the following infinite shell loop that loads and unloads the
+	module every second, just so we can see the difference in jiffies every second:
+	    $while true; do
+		>sudo insmod crash_syms.ko
+		>sudo rmmod crash_syms
+		>sleep 1
+		>done
+		$dmesg | tail -10
+		    ...
+			Current jiffies: 4308122728
+			Current jiffies: 4308122989
+			Current jiffies: 4308123251
+			...
+		And from the above, it's fairly clear that the system tick rate is 260.
+		
+		        What kernel symbols are available to your module?
+		From the source for this module, we need access to two symbols in the kernel symbol space:
+		    *the jiffies variable, and
+			*the printk() routine
+		how did the kernel guarantee that those symbols were available and visible to the module?--"exported"
+		You can think of kernel symbols (either functions or data objects) as being visible at three different
+	levels in the kernel source code:
+	        *"static", and therefore visible only within their own source file(just like standard user space programming),
+		    *"external", and therefore potentially visible to any other code built into the kernel itself, and
+		    *"exported", and therefore visible and available to any loadable module
+		Exporting kernel symbols so they're visible to loadable modules is typically done with one of:
+		    *EXPORT_SYMBOL(), which exports a given symbol to all loadable modules, or
+			*EXPORT_SYMBOL_GPL(), which exports a given symbol to only those modules that have a GPL-compatible license.(The
+		    first variation is far more common.)
+		In other words, given that we could access that two symbols from our module, we can be fairly certain that they're being
+	exported somewhere in the kernel source tree and, sure enough, they are:
+	        *kernel/printk.c:EXPORT_SYMBOL(printk);
+		    *kernel/time.c:EXPORT_SYMBOL(jiffies);
+		Let's let kernel wizard Robert Love summarize in his book "Linux Kernel Development"(****):
+		"When modules are loaded, they are dynamically linked into the kernel. As with userspace, dynamically linked binaries can 
+	call only into external functions that are explicitly exported for use. In the kernel, this is handled via special directives
+	EXPORT_SYMBOL() and EXPORT_SYMBOL_GPL()."
+		Functions that are exported are available for use by modules. Functions that are not exported cannot be invoked by modules.
+	The linking and invoking rules are much more stringent for modules than code in the core kernel image. Core code can call any
+	non-static interface in the kernel because all core source files are linked into a single base image. Exported symbols, of 
+	course, must be non-static, too.
+	    "The set of kernel symbols that are exported are known as the exported kernel interfaces or even (gasp) the kernel API."
+        Make sure you appreciate the significance of this sentence: "Core code can call any non-static interface in the kernel 
+	because all core source files are linked into a single base image.". That means that normal non-static, unexported symbols in 
+	kernel space are available to other routines that are built into the kernel, but are not available to loadable modules. In 
+	short, your modules are working with a more restricted kernel symbol table than other routines that are part of the kernel 
+	itself.
+	            Exporting your own symbols
+		crash_syms2.c
+		    #include <linux/module.h>
+            #include <linux/init.h>
+            #include <linux/kernel.h>
+
+            static int crash_syms2_static;
+            int        crash_syms2_external;
+            int        crash_syms2_exported;
+
+            EXPORT_SYMBOL(crash_syms2_exported);
+
+            static int __init syms_in(void)
+            {
+                printk(KERN_INFO "module crash_syms2 being loaded.\n");
+                return 0;
+            }
+
+            static void __exit syms_out(void)
+            {
+                printk(KERN_INFO "module crash_syms2 being unloaded.\n");
+            }
+
+            module_init(syms_in);
+            module_exit(syms_out);
+
+            MODULE_AUTHOR("Yan Xu");
+            MODULE_LICENSE("GPL");
+            MODULE_DESCRIPTION("Exporting some of our own symbols.");
+		yanxu@ubuntu:~/modules_yan/crash_syms2$make
+		Using "nm" utility to examine the module file to check its symbol table and see the visibility of various symbols:
+		yanxu@ubuntu:~/modules_yan/crash_syms2$nm crash_syms2.ko
+		    0000000000000000 T cleanup_module
+			0000000000000000 B crash_syms2_exported
+			0000000000000004 B crash_syms2_external
+			0000000010382b3a A __crc_crash_syms2_exported
+			0000000000000000 T init_module
+			0000000000000030 r __kcrctab_crash_syms2_exported
+			0000000000000000 r __kstrtab_crash_syms2_exported
+			0000000000000020 R __ksymtab_crash_syms2_exported
+			000000000000006c r __module_depends
+			                 U printk
+			0000000000000000 t syms_in
+			0000000000000000 t syms_out
+			0000000000000000 D __this_module
+			000000000000003b r __UNIQUE_ID_author0
+			0000000000000000 r __UNIQUE_ID_description0
+			000000000000002f r __UNIQUE_ID_license1
+			0000000000000049 r __UNIQUE_ID_srcversion1
+			0000000000000075 r __UNIQUE_ID_vermagic0
+			0000000000000000 r __versions
+		In terms of the module's symbol table:
+		    *crash_syms2_static is nowhere to be seen,
+			*crash_syms2_external clearly has some of visibility, and 
+			*crash_syms2_exported has far more visibility
+		yanxu@ubuntu:~/modules_yan/crash_syms2$sudo insmod crash_syms2.ko
+		yanxu@ubuntu:~/modules_yan/crash_syms2$grep crash_syms2 /proc/kallsyms
+		    0000000000000000 t syms_out   [crash_syms2]
+			0000000000000000 r __kstrtab_crash_syms2_exported  [crash_syms2]
+			0000000000000000 r __kcrctab_crash_syms2_exported  [crash_syms2]
+			0000000000000000 d __this_module [crash_syms2]
+			0000000000000000 t cleanup_module [crash_syms2]
+			0000000000000000 r __ksymtab_crash_syms2_exported [crash_syms2]
+			0000000000000000 b crash_syms2_external [crash_syms2]
+			0000000000000000 B crash_syms2_exported [crash_syms2]
+		
+		Lesson 11: Adding "proc" files to your modules -- Part 1
+		        What's the /proc directory about, anyway?
+		/proc/version: the version of the kernel running, which contains some fixed data corresponding to version information 
+		    about the running kernel
+		/proc/cpuinfo: the info of CPU
+		/proc/meminfo: current memory usage
+		
+		        /proc as a "pseudo" filesystem
+		At this point, the most important observation to make about the /proc directory is that, technically, it doesn't exist.
+	By that, I mean that it is not a normal directory containing normal text files that are sitting there, taking up user space
+	on the hard disk.
+	    Rather, the /proc directory represents what is the called proc "pseudo" filesystem, in that all of the files you see
+	there are simply access points(or windows, or whatever you want to call them) onto code running in kernel space, and any
+	user space access of those files translates into a call to kernel space, to the kernel code associated with that proc file,
+	which dynamically generates the output to be handed back to user space that, from your respective, looks like simple file
+	contents.
+	    Put more succinctly, any access to a proc file maps to some underlying kernel code that's responsible for handling any
+	read or write request for that file, in whatever way it wants. It just looks like a normal file to you.
+	    yanxu@ubuntu:~$ls -l /proc/version
+		    -r--r--r-- 1 root root 0 Nov 28 23:38 /proc/version
+		The entire /proc directory clearly represents a mount point of type "/proc":
+		yanxu@ubuntu:~$mount | grep proc
+		    proc on /proc type proc (rw,noexec,nosuid,nodev)
+		Contents in /proc/version are constant while in /proc/meminfo changing constantly.
+		
+		        Let's talk about /proc/version
+		Many of the simpler proc files are implemented by a single source file under the fs/proc directory in the kernel source
+	tree.
+	    yanxu@ubuntu:~/repo/linux$cat fs/proc/version.c
+		    #include <linux/fs.h>
+            #include <linux/init.h>
+            #include <linux/kernel.h>
+            #include <linux/proc_fs.h>
+            #include <<linux/seq_file.h>
+            #include <linux/utsname.h>
+
+            static int version_proc_show(struct seq_file *m, void *v)
+            {
+	            seq_printf(m, linux_proc_banner,
+		            utsname()->sysname,
+		            utsname()->release,
+		            utsname()->version);
+	            return 0;
+            }
+
+            static int version_proc_open(struct inode *inode, struct file *file)
+            {
+	            return single_open(file, version_proc_show, NULL);
+            }
+
+            static const struct file_operations version_proc_fops = {
+	            .open		= version_proc_open,
+	            .read		= seq_read,
+	            .llseek		= seq_lseek,
+	            .release	= single_release,
+            };
+
+            static int __init proc_version_init(void)
+            {
+	            proc_create("version", 0, NULL, &version_proc_fops);
+	            return 0;
+            }
+            fs_initcall(proc_version_init);
+		From within kernel space, the routine seq_printf() is invoked with the destination argument of a given seq_file that
+	just happens to correspond to what you see in user space as the /proc/version file. And the eventual contents are defined
+	by whatever the original kernel programmer decided would be gathered from various places around kernel space and bundled 
+	into a single string, printf-style.
+	
+	            Is that version stuff module code or not?
+		Even code that is built into the kernel can have entry/initialization code. 
+		The code of /proc/version is designed to be explicitly built into the kernel and never buildable as a module.
+		Examine the kernel makefile that controls the building of various proc files:
+		yanxu@ubuntu:~/repo/linux$cat fs/proc/Makefile
+		    #
+            # Makefile for the Linux proc filesystem routines.
+            #
+
+            obj-y += proc.o
+
+            proc-y                  := nommu.o task_nommu.o
+            proc-$(CONFIG_MMU)      := task_mmu.o
+
+            proc-y       += inode.o root.o base.o generic.o array.o \
+                            fd.o
+			proc-$(CONFIG_TTY)    += proc_tty.o
+			proc-y  += cmdline.o
+			proc-y  += consoles.o
+            proc-y  += cpuinfo.o
+            proc-y  += devices.o
+            proc-y  += interrupts.o
+            proc-y  += loadavg.o
+            proc-y  += meminfo.o
+            proc-y  += stat.o
+            proc-y  += uptime.o
+            proc-y  += version.o
+            proc-y  += softirqs.o
+			proc-y  += namespaces.o
+			proc-y  += self.o
+			proc-y  += thread_self.o
+            proc-$(CONFIG_PROC_SYSCTL)      += proc_sysctl.o
+            proc-$(CONFIG_NET)              += proc_net.o
+            proc-$(CONFIG_PROC_KCORE)       += kcore.o
+            proc-$(CONFIG_PROC_VMCORE)      += vmcore.o
+            proc-$(CONFIG_PRINTK)   += kmsg.o
+            proc-$(CONFIG_PROC_PAGE_MONITOR)        += page.o
+		Some of the source files in the fs/proc directory are not even configurable and will always be compiled into the kernel(
+	those are the "proc-y" files), while others will be compiled in based on your configuration. Depending on how your kernel was
+	configured and built, you may not have every possible proc file on your system.
+	    Related to our example, it's obvious that you should always have a /proc/version file, which is why the corresponding source
+	file has no exit routine -- that code can't be possibly unloaded so we don't need one.
+	
+	            Creating your own trivial proc file
+		Write a module that lets us display the current value of jiffies(create a proc file that allows you to print whatever you 
+	want from kernel space):
+		yanxu@ubuntu:~/modules_yan$mkdir jiffies_proc
+		yanxu@ubuntu:~/modules_yan/jiffies_proc$touch jiffies_proc.c
+		    #include <linux/module.h>
+            #include <linux/fs.h>
+            #include <linux/init.h>
+            #include <linux/kernel.h>
+            #include <linux/proc_fs.h>
+            #include <linux/seq_file.h>
+            #include <linux/jiffies.h>
+
+            static int
+            jiffies_proc_show(struct seq_file *m, void *v)
+            {
+                seq_printf(m, "%llu\n",
+                    (unsigned long long) get_jiffies_64());
+                return 0;
+            }
+
+            static int
+            jiffies_proc_open(struct inode *inode, struct file *file)
+            {
+                return single_open(file, jiffies_proc_show, NULL);
+            }
+
+            static const struct file_operations jiffies_proc_fops = {
+                .owner      = THIS_MODULE,
+                .open       = jiffies_proc_open,
+                .read       = seq_read,
+                .llseek     = seq_lseek,
+                .release    = single_release,
+            };
+
+            static int __init
+            jiffies_proc_init(void)
+            {
+                proc_create("crash_jiffies", 0, NULL, &jiffies_proc_fops);
+                return 0;
+            }
+
+            static void __exit
+            jiffies_proc_exit(void)
+            {
+                remove_proc_entry("crash_jiffies", NULL);
+            }
+
+            module_init(jiffies_proc_init);
+            module_exit(jiffies_proc_exit);
+
+            MODULE_AUTHOR("Yan Xu");
+            MODULE_LICENSE("GPL");
+            MODULE_DESCRIPTION("A jiffies /proc file.");
+        yanxu@ubuntu:~/modules_yan/jiffies_proc$make
+		yanxu@ubuntu:~/modules_yan/jiffies_proc$sudo insmod jiffies_proc.ko
+		Then /proc/crash_jiffies will be seen:
+		yanxu@ubuntu:~/modules_yan/jiffies_proc$ls /proc | grep crash
+		    crash_jiffies
+		yanxu@ubuntu:~/modules_yan/jiffies_proc$cat /proc/crash_jiffies
+		    4324657739
+		yanxu@ubuntu:~/modules_yan/jiffies_proc$sudo rmmod jiffies_proc
+		
+		Lesson 12: Adding "proc" files to your modules -- Part 2
+		        So ... where were we?
+		In short, proc files give us the ability to create a "file" in user space under the /proc directory such that, when we "list"
+	the contents of that file, what is returned is whatever the associated code in kernel space chooses to "return" as the alleged 
+	contents of that file. That is, each of our simple debugging proc files can be created by a loadable module, and we can use 
+	that module to display whatever kernel space information we want in any format whenever anyone chooses to list the associated
+	proc file.
+	    yanxu@ubuntu:~/modules_yan$mkdir crash_hz
+		yanxu@ubuntu:~/modules_yan/crash_hz$touch crash_hz.c
+		    #include <linux/module.h>
+            #include <linux/init.h>
+            #include <linux/kernel.h>
+            #include <linux/fs.h>
+            #include <linux/proc_fs.h>
+            #include <linux/seq_file.h>
+
+            static int
+            hz_show(struct seq_file *m, void *v)
+            {
+                seq_printf(m, "%d\n", HZ);
+                return 0;
+            }
+
+            static int
+            hz_open(struct inode *inode, struct file *file)
+            {
+                return single_open(file, hz_show, NULL);
+            }
+
+            static const struct file_operations hz_fops = {
+                .owner      = THIS_MODULE,
+                .open       = hz_open,
+                .read       = seq_read,
+                .llseek     = seq_lseek,
+                .release    = single_release,
+            };
+
+            static int __init
+            hz_init(void)
+            {
+                printk(KERN_INFO "Loading hz module, HZ = %d.\n", HZ);
+                proc_create("hz", 0, NULL, &hz_fops);
+                return 0;
+            }
+
+            static void __exit
+            hz_exit(void)
+            {
+                remove_proc_entry("hz", NULL);
+                printk(KERN_INFO "Unloading hz module.\n");
+            }
+
+            module_init(hz_init);
+            module_exit(hz_exit);
+
+            MODULE_LICENSE("GPL");
+		yanxu@ubuntu:~/modules_yan/crash_hz$make
+		yanxu@ubuntu:~/modules_yan/crash_hz$sudo insmod crash_hz.ko
+		yanxu@ubuntu:~/modules_yan/crash_hz$cat /proc/hz
+		    250
+		
+		        RTFS -- Read The Fine Source
+		You're going to have to get used to digging into the kernel source to verify how something is truly done.
+		*fs/proc -- a directory of code to generate a number of proc files, including some you've already seen,
+		*include/linux/fs.h -- declarations for various, generic filesystem structure,
+		*include/linux/proc_fs.h -- declarations for the various proc file routines, many of them declared as static inlines,
+		*include/linux/seq_file.h -- declarations specifically for the "sequence file" implementation of proc files, and
+		*the book "Linux Device Drivers (3rd ed)", hereafter referred to as "LDD3" and available online here(https://lwn.net/Kernel/LDD3/) -- it has an 
+		excellent section on proc files in Chapter 4 that I'll be referring to a bit later on.
+		    
+			    So what's a "sequence" file, anyway?
+		A sequence file is simply a particular (and newer) implementation of a proc file that solves an old problem, in that 
+	early proc files had trouble "printing" output that was larger than the architecture's PAGE_SIZE. A sequence file that allowed
+	all of the output to be generated in pieces, none of which exceeded a page size.
+	    It's critical to understand that, from the user's perspective, listing the (lengthy) contents of that proc file was
+	still a single operation but, underneath, the sequence file code was making multiple calls to transfer the data from kernel
+	space to user space where the user could read it. In short, the user saw absolutely no difference when listing the contents
+	of the file under /proc.
+	
+	            The HZ code in bits and pieces
+		    The show routine
+		static int
+        hz_show(struct seq_file *m, void *v)
+        {
+            seq_printf(m, "%d\n", HZ);
+            return 0;
+        }
+		The first argument, a pointer to a sequence file structure, and use seq_printf() to write to it as much data formatted
+	any way you want, then return zero to show success.
+	
+	        The open routine
+		static int
+        hz_open(struct inode *inode, struct file *file)
+        {
+            return single_open(file, hz_show, NULL);
+        }
+        
+		    The file_operations structure
+		static const struct file_operations hz_fops = {
+            .owner      = THIS_MODULE,
+            .open       = hz_open,
+            .read       = seq_read,
+            .llseek     = seq_lseek,
+            .release    = single_release,
+        };
+        The file_operations structure is declared in the header file fs.h and represents a collection of file operations that 
+	are defined for any type of file, not just sequence files. But since sequence files are such a simple type of file, you're
+	free to ignore most of the fields in that structure when you define an example for a sequence file.
+	    In fact, if you look closely, you really need to define only the "open" number of the structure, since all the other 
+	members can be set to the default values associated with sequence files. (In fact, in the above case, you can probably do
+	away with the llseek value, since your example is so short, you really shouldn't be planning to do any seeking on your file.
+	In short, your definition of that file_operations structure is pretty well self-evident.)
+	
+	        The entry and exit routines
+	    static int __init
+        hz_init(void)
+        {
+            printk(KERN_INFO "Loading hz module, HZ = %d.\n", HZ);
+            proc_create("hz", 0, NULL, &hz_fops);
+            return 0;
+        }
+
+        static void __exit
+        hz_exit(void)
+        {
+            remove_proc_entry("hz", NULL);
+            printk(KERN_INFO "Unloading hz module.\n");
+        }
+        In the call to proc_create(), the value zero you see there represents the permissions you want on the proc file, where
+    zero represents the default value of file permissions of 0444. In other words, you could have just used the numeric value
+    0444(for octal), or 0400 for more restrictive access, and so on. But using zero for a typical readable proc file is fairly
+    normal.
+
+            Creating proc files further down the /proc directory
+        The header file proc_fs.h for the prototypes of those two routines:
+        static inline struct proc_dir_entry *
+        proc_create(const char *name,
+            mode_t mode,
+            struct proc_dir_entry *parent,
+            const struct file_operations *proc_fops
+        )
+
+        extern void
+        remove_proc_entry(const char *name,
+            struct proc_dir_entry *parent
+        )	
+        It should be clear that the call parameter NULL values are supposed to represent the parent proc directory entry under
+    which you'd like to create your new files. If those arguments are, in fact, NULL, your files are created immediately within
+    the top level of /proc directory(as they have been until now).
+	    On the other hand, as you'll see shortly, you have the right to create a directory, then create your proc files under 
+	that directory to keep things organized. 
+	
+	            What happens if something goes wrong?
+		It's probably wise to always check that every proc file creation succeeded, and generate an error if it didn't.
+		    The proc irq/ directory
+		$ ls /proc/irq
+            0  10  12  14  16  2   23  25  27  3   32  4  6  8  default_smp_affinity
+            1  11  13  15  17  22  24  26  28  31  33  5  7  9 ...
+		Under the /proc directory, there's a further irq/ directory full of information about IRQs. All those proc files come 
+	from the source file kernel/irq/proc.c, some snippets of which we reproduce here and which should be fairly comprehensible
+	at this point:
+		...
+		static struct proc_dir_entry *root_irq_dir;
+		...
+		void init_irq_proc(void)
+		{
+			unsigned int irq;
+			struct irq_desc *desc;
+
+			/* create /proc/irq */
+			root_irq_dir = proc_mkdir("irq", NULL);
+			if (!root_irq_dir)
+                return;
+
+			register_default_affinity_proc();
+
+			/*
+			* Create entries for all existing IRQs.
+			*/
+			for_each_irq_desc(irq, desc) {
+                if (!desc)
+                    continue;
+
+                register_irq_proc(irq, desc);
+			}
+		}
+			Possible values for HZ
+		If you run "make menuconfig" for kernel configuration, you'll notice under "Processor type and features" the entry 
+	"Timer frequency", which gives you a small number of choices including 100, 250, 300 and 1000. So it's entirely possible 
+	that, whichever type of Ubuntu you installed (Desktop, Server, ...), you'll get a different value.
+   
+		Lesson 13: Proc files and sequence files -- Part 3 
+				The sample program
+		yanxu@ubuntu:~/modules_yan$mkdir crash_events
+		yanxu@ubuntu:~/modules_yan/crash_events$touch crash_events.c
+		crash_events.c
+		    #include <linux/module.h>
+            #include <linux/moduleparam.h>
+            #include <linux/init.h>
+            #include <linux/kernel.h>
+            #include <linux/fs.h>
+            #include <linux/proc_fs.h>
+            #include <linux/seq_file.h>
+            #include <linux/slab.h>      // for kmalloc() dynamic allocation
+
+            static int limit = 10;
+            module_param(limit, int, S_IRUGO);
+
+            static int* even_ptr;
+
+            static void *
+            ct_seq_start(struct seq_file *s, loff_t *pos)
+            {
+                printk(KERN_INFO "Entering start(), pos = %Ld.\n", *pos);
+
+                if ((*pos) >= limit) {     // are we done?
+                    printk(KERN_INFO "Apparently, we're done.\n");
+                    return NULL;
+                }
+
+                //  Allocate an integer to hold our increasing even value.
+
+                even_ptr = kmalloc(sizeof(int), GFP_KERNEL);
+
+                if (!even_ptr)     // fatal kernel allocation error
+                    return NULL;
+
+                printk(KERN_INFO "In start(), even_ptr = %pX.\n", even_ptr);
+                *even_ptr = (*pos) * 2;
+                return even_ptr;
+            } 
+
+            static int
+            ct_seq_show(struct seq_file *s, void *v)
+            {
+                printk(KERN_INFO "In show(), even = %d.\n", *((int*)v));
+                seq_printf(s, "The current value of the even number is %d\n",
+                    *((int*)v));
+                return 0;
+            }
+
+            static void *
+            ct_seq_next(struct seq_file *s, void *v, loff_t *pos)
+            {
+                int* val_ptr;
+
+                printk(KERN_INFO "In next(), v = %pX, pos = %Ld.\n", v, *pos);
+
+                (*pos)++;                // increase my position counter
+                if ((*pos) >= limit)     // are we done?
+                    return NULL;
+
+                val_ptr = (int *) v;     // address of current even value
+                (*val_ptr) += 2;         // increase it by two
+
+                return v;
+            } 
+
+            static void
+            ct_seq_stop(struct seq_file *s, void *v)
+            {
+                printk(KERN_INFO "Entering stop().\n");
+
+                if (v) {
+                    printk(KERN_INFO "v is %pX.\n", v);
+                } else {
+                    printk(KERN_INFO "v is null.\n");
+                }
+
+                printk(KERN_INFO "In stop(), even_ptr = %pX.\n", even_ptr);
+
+                if (even_ptr) {
+                    printk(KERN_INFO "Freeing and clearing even_ptr.\n");
+                    kfree(even_ptr);
+                    even_ptr = NULL;
+                } else {
+                    printk(KERN_INFO "even_ptr is already null.\n");
+                }
+            } 
+
+            static struct seq_operations ct_seq_ops = {
+                .start = ct_seq_start,
+                .next  = ct_seq_next,
+                .stop  = ct_seq_stop,
+                .show  = ct_seq_show
+            };
+
+            static int
+            ct_open(struct inode *inode, struct file *file)
+            {
+                return seq_open(file, &ct_seq_ops);
+            };
+
+            static struct file_operations ct_file_ops = {
+                .owner   = THIS_MODULE,
+                .open    = ct_open,
+                .read    = seq_read,
+                .llseek  = seq_lseek,
+                .release = seq_release
+            };
+
+            static int 
+            ct_init(void)
+            {
+                struct proc_dir_entry *entry;
+
+                //entry = create_proc_entry("evens", 0, NULL);    //create_proc_entry function has been discarded since 3.10 version
+
+                //if (entry)
+                 //   entry->proc_fops = &ct_file_ops;
+				 
+				entry = proc_create("evens", 0, NULL, &ct_file_ops);
+                if (!entry)
+                    return -1;
+				
+				return 0;
+            }
+
+            static void
+            ct_exit(void)
+            {
+                remove_proc_entry("evens", NULL);
+            }
+
+            module_init(ct_init);
+            module_exit(ct_exit);
+
+            MODULE_LICENSE("GPL"); 
+			
+		Makefile:
+		    ifeq ($(KERNELRELEASE),)  
+
+            KERNELDIR ?= /lib/modules/$(shell uname -r)/build 
+            PWD := $(shell pwd)  
+
+            .PHONY: build clean  
+
+            build:
+	            $(MAKE) -C $(KERNELDIR) M=$(PWD) modules  
+
+            clean:
+	            rm -rf *.o *~ core .depend .*.cmd *.ko *.mod.c 
+	            rm -rf .tmp_versions
+	            rm -f modules.order Module.symvers
+
+            else  
+
+            $(info Building with KERNELRELEASE = ${KERNELRELEASE}) 
+            obj-m :=    crash_evens.o  
+
+            endif
+		yanxu@ubuntu:~/modules_yan/crash_events$make
+		yanxu@ubuntu:~/modules_yan/crash_events$sudo insmod crash_evens.ko
+		yanxu@ubuntu:~/modules_yan/crash_events$cat /proc/evens
+		    The current value of the even number is 0
+            The current value of the even number is 2
+            The current value of the even number is 4
+            The current value of the even number is 6
+            The current value of the even number is 8
+            The current value of the even number is 10
+            The current value of the even number is 12
+            The current value of the even number is 14
+            The current value of the even number is 16
+            The current value of the even number is 18
+		yanxu@ubuntu:~/modules_yan/crash_events$dmesg | tail -30
+		    $ sudo tail -f /var/log/messages
+            ... Entering start(), pos = 0.
+            ... In start(), even_ptr = ffff880126662c98.
+            ... In show(), even = 0.
+            ... In next(), v = ffff880126662c98, pos = 0.
+            ... In show(), even = 2.
+            ... snip ...
+            ... Entering stop().
+            ... v is null.
+            ... In stop(), even_ptr = ffff880126662c98.
+            ... Freeing and clearing even_ptr.
+            ... Entering start(), pos = 10.
+            ... Apparently, we're done.
+            ... Entering stop().
+            ... v is null.
+            ... In stop(), even_ptr = (null).
+            ... even_ptr is already null.			
+		The default limit of 10 even numbers to be printed is actually a module parameter.
+		    yanxu@ubuntu:~/modules_yan/crash_events$sudo insmod crash_evens.ko limit=25
+			
+			    So what was the point of sequence files again?
+		Early proc files had an annoying limitation in that it was difficult(but not impossible) to generate more than
+	a page of output in a single kernel space print operation. Because of this, a newer implementation of proc files -- called
+	"sequence files" -- was invented that allowed the underlying kernel space code to produce the proc file's output in smaller,
+	bite-size pieces, one print operation at a time, to beat the page size limit. 
+	    While the kernel code will be producing the sequence file output a bit at a time, this is entirely transparent to user
+	space. A user who wants to print the contents of a sequence file will still invoke a single command such as:
+	    $cat /proc/evens
+		and will get potentially page after page of what appears to be consecutive output lines. The fact that the kernel space 
+	code is generating all that output in bits and pieces is of no concern to user space, who doesn't need to know the underlying 
+	mechanics. All of that detail is hidden in the implementation of the sequence file.
+	
+	            So when would I use a sequence file?
+		Obviously, you'd want to use a sequence file if you have a massive amount of output to "print" to a proc file. But there's
+	more to it than that.
+        Typically, you'd use a sequence file to print lengthy output that consists of a list or set of related items of some kind,
+	such as all of the entries in an array, or the objects in a linked list, that sort of thing. That's because the way a sequence
+	file works is that each invocation of its "show" routine is normally responsible for printing a single one of those "items," 
+	then remembering where it is in the list of items. The next invocation of the show routine will check to see which item it 
+	printed last, bump up its pointer or index or whatever, then print the next item in the list.
+        In short, a single user space listing of a sequence file will translate to multiple calls to the sequence file's show 
+	routine, each invocation printing the next item in the collection and keeping track of where it is, until there are no more 
+	items to be printed, and all of that happening completely transparently to the user. The only limitation is (you guessed it) 
+	that each of those items to be printed can't be larger than a single page but, for the most part, they rarely are depending 
+	on what you're trying to print.
+        Finally, you might remember that we've used sequence files to represent even proc files that generate very little output, 
+	such as fs/proc/version.c:
+        $ cat /proc/version
+        That's only because sequence files have such a simple implementation that a lot of code uses them even when it's, strictly
+	speaking, not necessary.
+	
+	            The show() routine of a sequence file
+		Recall that all of our generic, readable proc files were responsible for implementing a "show()" routine that was 
+	responsible for generating the alleged contents of that proc file when someone tried to list in. In the case of the 
+	/proc/version file, the entire show routine was:
+            static int version_proc_show(struct seq_file *m, void *v)
+            {
+                seq_printf(m, linux_proc_banner,
+                    utsname()->sysname,
+                    utsname()->release,
+                    utsname()->version);
+                return 0;
+            }
+        In other words, in a single invocation, that file's show routine was responsible for generating the entirety of the proc
+	file's output in a single print operation. However, when dealing with sequence files, how a show routine works is noticeably
+	different.
+	    With a sequence file, your "show" routine will be invoked once per item to be printed, so that the code in your show 
+	routine is not responsible for printing all of the output at once, only the output corresponding for one of the items that 
+	make up the entire output. This sounds simple, except that it raises the obvious question:
+            How does the show routine know which item to print?
+		The solution is fairly obvious -- while your show routine is printing each item, it's also keeping track of "where" in the
+	list or set of items it is. In other words, somehow, your show routine is quietly storing off to the side a pointer or address
+	or index of whatever item it last printed so that when it's called again, it will know which item has already been printed, it
+	can "move" to the next item (however it does that) and, finally, it will clearly have to update its current pointer or address
+	or index to move to the next one. Eventually, of course, the show routine will reach the end of the list of items to print, 
+	and it will return a special value of some kind to make this clear. All in all, a fairly simple idea. So what is it that your
+	sequence file routine will be storing?
+        Curiously, it will be storing two seemingly equivalent pieces of information. It will store an "index" (normally 
+	representing the number of the item in the set), plus it will be storing an actual kernel space address of the current item. 
+	And every time that show routine is called, it will use one or both of these pieces of information to determine where to get 
+	the next item to print.
+        It might be that you're sequencing your way through an array, so it's easy to determine the next item to "print." Or you 
+	could be iterating your way through a linked list, which is still fairly simple to process. In any event, you'll see shortly 
+	that, no matter what kind of "items" you're working with, it's your responsibility to know how to move from one to the next 
+	as your show routine is called over and over.
+	
+	            The seq_operations structure
+		To have a proper sequence file that does actual sequencing, you'll need to define four routines as defined in the 
+	following structure that's declared in the seq_file.h header file:
+            struct seq_operations {
+                void * (*start) (struct seq_file *m, loff_t *pos);
+                void (*stop) (struct seq_file *m, void *v);
+                void * (*next) (struct seq_file *m, void *v, loff_t *pos);
+                int (*show) (struct seq_file *m, void *v);
+            };
+        Predictably, given their names, each of those routines will define what it means to start/initialize the printing, show 
+	the current item, move to the next item and any cleanup you need to do when you finally stop printing. So let's tackle those 
+	routines one at a time.
+	
+	        start()
+		When you try to print a sequence file, the first routine invoked is its start() routine:
+		    void * (*start) (struct seq_file *m, loff_t *pos);
+		This routine does no actual printing -- all it does is initialize everything in preparation for printing. It may be that 
+	you need to, perhaps, initialize a device driver, or allocate some space, or what have you. Regardless, the start routine's 
+	job is to do all preliminary processing before any output is generated.
+        More specifically, the start routine is called with an initial offset of zero (that's the loff_t *pos argument you see up 
+	there), so that's where you can store your constantly increasing offset or index for the items as you print them one at a time.
+        In addition, the void* pointer that you return is the address in kernel space of the very first item to be printed in this
+	sequence. In other words, part of the responsibility of your start routine is to figure out the address of the first item to 
+	be printed, and to return it. And you'll see why right away.
+	
+	        show()
+		Your show routine will have the following prototype:
+            int (*show) (struct seq_file *m, void *v);
+        and its purpose is delightfully simple -- it will take the void* address of an "item," print it in whatever format you 
+	want, then return zero to signify success. In short, this is the code that "prints" a single item, nothing more.
+	
+	        next()
+		Here's the prototype of the next routine:
+            void * (*next) (struct seq_file *m, void *v, loff_t *pos);
+	    Given both the current item pointer and the "offset" of that item, the job of the next routine is:
+            *Doing whatever it takes, calculate the address of the next item to be printed.
+            *Increment the offset value based on whatever criteria you're using to define the offset of an item (perhaps as simple
+			as its position in a list).
+            *If there is a next item, return its address. Otherwise, if you're out of items and you're therefore done, return NULL
+			to signify that.
+        All in all, the next routine is not that complicated -- its sole job is to simply figure out where the next item is, and 
+	return that. 
+	
+	        stop()
+		Predictably, you need to define a closing stop routine, whose job it is clean up any device initialization or dynamic 
+	allocation or what have you that was done in your start routine. In most cases, this is an incredibly trivial routine, but 
+	you need to define it anyway.
+	
+	            Generating even numbers -- a trivial example
+		As you can see, the example I chose to demonstrate sequence files was to generate a finite sequence of even numbers, where
+	each printed number was treated as an "item" that was printed individually, whereupon the sequence file routines then 
+	determined the next item to go on to, and so on. But because this is such a massively simple example, I was able to cut 
+	corners in the code.
+        Recall that the purpose of a sequence file's "next" routine was to, given the address of an item, somehow calculate the 
+	address of the next item in the sequence -- suggesting that the next item would exist at a different address, and that perhaps
+	all items would exist in kernel space at the same time.and have different kernel space addresses.
+        In the case of printing even numbers, I was able to simplify the code and allocate a single value to store the "current" 
+	even number, and when the "next" was called with the address of the current even number, rather than calculate where the next 
+	number would be, I quietly change the value being stored at that address, whereupon I return the same address I was passed.
+        Note well that this isn't what you'd normally do -- normally, you'd really have different addresses for all the items 
+	you're trying to print. But in this case, I'm going to dynamically allocate a single integer in the start routine, and just 
+	keep reusing it over and over for subsequent even numbers. In short, the "address" of succeeding items is never going to 
+	change, I'll just keep updating the value at that address. But that only works given the triviality of this example.
+   
+                A sample run
+		$dmesg | tail -30
+		    ... Entering start(), pos = 0.
+            ... In start(), even_ptr = ffff880124546110.
+            ... In show(), even = 0.
+            ... In next(), v = ffff880124546110, pos = 0.
+            ... In show(), even = 2.
+            ... In next(), v = ffff880124546110, pos = 1.
+            ... In show(), even = 4.
+            ... In next(), v = ffff880124546110, pos = 2.
+            ... In show(), even = 6.
+            ... In next(), v = ffff880124546110, pos = 3.
+            ... In show(), even = 8.
+            ... In next(), v = ffff880124546110, pos = 4.
+            ... In show(), even = 10.
+            ... In next(), v = ffff880124546110, pos = 5.
+            ... In show(), even = 12.
+            ... In next(), v = ffff880124546110, pos = 6.
+            ... In show(), even = 14.
+            ... In next(), v = ffff880124546110, pos = 7.
+            ... In show(), even = 16.
+            ... In next(), v = ffff880124546110, pos = 8.
+            ... In show(), even = 18.
+            ... In next(), v = ffff880124546110, pos = 9.
+            ... Entering stop().
+            ... v is null.
+            ... In stop(), even_ptr = ffff880124546110.
+            ... Freeing and clearing even_ptr.
+			... Entering start(), pos = 10.
+			... Apparently, we're done.
+			... Entering stop().
+			... v is null.
+			... In stop(), even_ptr = (null).
+			... even_ptr is already null.
+		The first routine that's called is the start routine, which does any necessary initialization, followed by a call to the 
+	show routine which "prints" the value of the current item, then a call to the next routine to calculate the address of the 
+	next item to print, culminating in a call to the stop routine when the next routine signifies that there are no more items 
+	to print.
+	
+	            What happens you have lots of output?
+		To see what I mean, unload the module, then reload it with a limit of, say, 1000, to print that many even numbers. List 
+	the file, then examine the log file /var/log/messages to notice something strange in all that output:
+            ... Entering start(), pos = 0.
+            ... In start(), even_ptr = ffff880126662b88.
+            ... In show(), even = 0.
+            ... snip ...
+            ... In show(), even = 186.
+            ... In next(), v = ffff880126662b88, pos = 93.
+            ... In show(), even = 188.
+            ... Entering stop().
+            ... v is ffff880126662b88.
+            ... In stop(), even_ptr = ffff880126662b88.
+            ... Freeing and clearing even_ptr.
+            ... Entering start(), pos = 94.
+            ... In start(), even_ptr = ffff880126662b88.
+            ... In show(), even = 188.
+            ...
+        Hang on, what happened there? You were nowhere near finished printing the first 1000 even numbers, but out of nowhere, the
+	code called the stop routine, cleaned up after itself, then promptly called start to, apparently, pick up where it left off. 
+	Actually, that's exactly what it did.
+        Recall that limitation of early proc files -- an inability to print more than a single page of output. In fact, sequence 
+	files have a similar limitation in that, as they're printing item after item, if the next print would exceed a page size, the 
+	sequence files closes off, prints that output and calls the stop routine. Except that it immediately calls the start routine 
+	again with the last known offset and gives the start routine to pick things up where they left off and keep going! And the 
+	only way the start routine knows that it's being called in the middle of a sequence is based on that offset value that it's 
+	passed.
+	
+	            The code
+		    The item data value
+		static int* even_ptr;
+        That's the pointer to where my even numbers will eventually reside -- the data item that I will cheat and keep reusing for
+	every single even number.
+	        
+			The start routine
+		static void *
+        ct_seq_start(struct seq_file *s, loff_t *pos)
+        {
+            printk(KERN_INFO "Entering start(), pos = %Ld.\n", *pos);
+
+            if ((*pos) >= limit) {     // are we done?
+                printk(KERN_INFO "Apparently, we're done.\n");
+                return NULL;
+            }
+
+            //  Allocate an integer to hold our increasing even value.
+
+            even_ptr = kmalloc(sizeof(int), GFP_KERNEL);
+
+            if (!even_ptr)     // fatal kernel allocation error
+                return NULL;
+
+            printk(KERN_INFO "In start(), even_ptr = %pX.\n", even_ptr);
+            *even_ptr = (*pos) * 2;
+            return even_ptr;
+        }
+        What to notice about the above:
+            *Every time I enter, I'll print my current "offset". The very first time, this is guaranteed to be zero, which is how 
+			the start routine is notified that we're actually starting. If that value is greater than zero, that denotes that 
+			we're being called again in the middle of a sequence, and we have to behave accordingly.
+            *If our current position is larger than the limit, we've obviously printed all the even numbers and we're done and we 
+			return the value of NULL to tell the kernel that, yes, we're truly finished.
+            *Each time the start routine is called, dynamically allocate a single integer to hold the even numbers. That's the 
+			address we're going to return as the address of every item.
+        Most importantly, you can see that, whenever that start routine is called, the initial even number is not just initialized
+	to zero. Rather, it's initialized to twice the offset value passed in as an argument, to take into account that we're being 
+	re-invoked in the middle of a sequence, as I explained above.
+	
+	        The show routine
+		static int
+        ct_seq_show(struct seq_file *s, void *v)
+        {
+            printk(KERN_INFO "In show(), even = %d.\n", *((int*)v));
+            seq_printf(s, "The current value of the even number is %d\n",
+                *((int*)v));
+            return 0;
+        }
+        You've been given the pointer to the "item" to print -- cast it to an integer pointer and print it as an integer, both to 
+	the sequence file and to the log file for debugging purposes.
+	
+	        The next routine
+		static void *
+        ct_seq_next(struct seq_file *s, void *v, loff_t *pos)
+        {
+            int* val_ptr;
+
+            printk(KERN_INFO "In next(), v = %pX, pos = %Ld.\n", v, *pos);
+
+            (*pos)++;                // increase my position counter
+            if ((*pos) >= limit)     // are we done?
+                return NULL;
+
+            val_ptr = (int *) v;     // address of current even value
+            (*val_ptr) += 2;         // increase it by two
+
+            return v;
+        }
+		In short, you've been given two values to increment -- you should increment the offset to the next value depending on how 
+	you're defining that offset, and you need to take the current item address, and do whatever it takes to calculate where the 
+	next one is and return that.
+        Again, you'll notice that because our example is so simple, I just keep reusing the same data object, so I'm always 
+	returning the same address I'm receiving.
+	
+	        The stop routine
+		Finally, closing out the picture, the stop routine is responsible for cleaning up but, as we explained above, this routine 
+	might actually be invoked in the middle of a sequence being printed, so it's important to know that the very end of your 
+	processing might involve two extra calls to both start and stop, which immediately recognize that there's really no more to be
+	printed. This means that your stop routine has to be extremely careful not to try to deallocate space twice, as you can see it
+	doing above.
+		Note well that, even after the last even number is printed and your stop routine is called and the space deallocated, your
+	start routine will always be called again just in case, and it's your responsibility to make sure that your code can handle 
+	that boundary case -- that there really are no more items to print.
+	    Run the module again for just 10 even numbers, and if you check the log file, you'll still see those extraneous calls to 
+	start and stop at the end. This is just emphasizing that you have to code your start and stop routines to always be able to 
+	handle being called multiple times, including once even after all the items have been printed.
+	
+				And in conclusion...
+		Source code: $cat /proc/devices      source file fs/proc/devices.c 
+		
+		        Afterthoughts
+		    Do you really need a sequence file?
+		The rationale behind using a sequence file is that you're going to have lots of output from your proc file and, in 
+	addition, the output seems to fit the pattern of iterating through some kind of set or collection of objects.
+        But in some cases, even if you have loads of output, sometimes a trivial proc file will still do nicely. Take a look at 
+	the output from this command:
+        $ cat /proc/meminfo
+    While that output looks like it might match the sequence file model nicely, take a look at the kernel source file 
+	fs/proc/meminfo.c -- it's generated by one massive, single seq_printf() call, which works just fine.
+	
+			Why there are two different position values
+		Observant readers will have noticed that, as you step through the items to be printed, there are actually two values that 
+	are allegedly keeping track of your current "position." There's the kernel space pointer void* v that you keep passing around 
+	(whose purpose is fairly obvious), but there's also that offset value that seems not so clearly defined.
+		The first time people see the offset value, they're not quite sure what they're supposed to do with it since it would 
+	appear that the v address does everything they need.
+		I could be wrong but, as I've read it, the reason for the offset value is to allow you to pick up where you left off after
+	intermediate calls to your start and stop routines. Unless I'm mistaken, when your start routine is called to resume printing 
+	partway through the list of items, you no longer have access to the kernel space item address, so you can't just start there. 
+	What you are passed is the offset value as it was last set and, from that value alone, you need to be able to figure out where
+	you left off. The actual value you choose to store in that offset data object is entirely up to you, as long as you know how 
+	to map its value back to where in the list of items you need to resume printing.
+		In fact, if you look at the code for the /proc/devices file in fs/proc/devices.c, you'll notice something odd about how 
+	that sequence file moves from one item to the next:
+			static void *devinfo_next(struct seq_file *f, void *v, loff_t *pos)
+			{
+				(*pos)++;
+				if (*pos >= (BLKDEV_MAJOR_HASH_SIZE + CHRDEV_MAJOR_HASH_SIZE))
+					return NULL;
+				return pos;
+			}
+		If you look closely, the item address pointer v and the offset value are being used for the same purpose; that is, the 
+	offset value is what's being returned as the void kernel space address pointer. That's because sequencing through the kernel 
+	space devices is so simple that there's no reason to treat those two values differently. So they're just lumped together. If 
+	you can get away with this, it's perfectly acceptable.
+	
+			What's that seq_file structure, anyway?
+		In your sequencing routines, you're continually being passed a pointer to a structure of type seq_file. You didn't need to
+	create it yourself, it's created for you and, in most cases, you can ignore it since you have no need to understand what it 
+	looks like -- you just use it, such as during a call to seq_printf().
+		But if you're curious, its declaration can be found in the kernel header file include/linux/seq_file.h:
+			struct seq_file {
+				char *buf;
+				size_t size;
+				size_t from;
+				size_t count;
+				loff_t index;
+				loff_t read_pos;
+				u64 version;
+				struct mutex lock;
+				const struct seq_operations *op;
+				void *private;
+			};
+		It's actually not a complicated structure and you'll notice that it appears to keep track of a number of obvious values, 
+	like size and offset. This suggests that, every time one of your sequencing routines is called, you have the ability to take 
+	a peek into that structure and, say, print some of its current values, just for the fun of it. And if you're feeling ambitious,
+	why don't you do that, just to see how those values change as you're printing your even numbers.
+		Another simple example is in fs/proc/interrupts.c (for /proc/interrupts).
+		I thought this was interesting because the show() function - show_interrupts() - is not defined in this file along with 
+	the other three routines, but prototyped in include/linux/interrupt.h (definition example in arch/x86/kernel/irq.c).
+	
+		[INTERMISSION]Getting up-to-date kernel documentation
+				Where can you get up-to-date kernel documentation?
+			The Documentation/ directory
+		The Documentation/ directory that's part of the kernel source tree itself. While that's a good place to start, that 
+	directory has the same drawback as most kernel documentation in that it contains quite a lot of ageing and obsolete 
+	information, so treat what you see there appropriately sceptically.
+			
+			"Building" the in-kernel DocBook documentation
+		Documentation/DocBook/ with "tmpl"-format document files.
+		yanxu@ubuntu:~/repo/linux$make help
+			...
+			Documentation targets:
+			Linux kernel internal documentation in different formats:
+				htmldocs        - HTML
+				pdfdocs         - PDF
+				psdocs          - Postscript
+				xmldocs         - XML DocBook
+				mandocs         - man pages
+				installmandocs  - install man pages generated by mandocs
+				cleandocs       - clean all generated DocBook files
+			...
+		If you want to build readable HTML files out of all that documentation template info, you'd simply run:
+			$make htmldocs
+		For HTML, you'll probably need whatever corresponds to the libxml2, xsltproc and xmlto packages for your distribution. For
+	PDF, you'll need even more, specifically an FO processor like FOP.
+		If the build succeeds, your Documentation/DocBook/ should now be full of HTML files at which you can point a browser and 
+	start reading.
+	
+				Up-to-date kernel API documentation
+		The kernel-api documentation, which is built from rummaging through the kernel source tree and collecting all inline 
+	documentation, should stay current, and because it's generated dynamically from the actual source.
+		Here's a sample of that "inline" documentation from the library source file lib/bitmap.c:
+			/**
+			* __bitmap_shift_left - logical left shift of the bits in a bitmap
+			*   @dst : destination bitmap
+			*   @src : source bitmap
+			*   @shift : shift by this many bits
+			*   @bits : bitmap size, in bits
+			*
+			* Shifting left (multiplying) means moving bits in the LS -> MS
+			* direction.  Zeros are fed into the vacated LS bit positions
+			* and those MS bits shifted off the top are lost.
+			*/
+		The file kernel-api.tmpl defines all files and directories examined for this inline documentation, collects all of it and 
+	renders it into(in this case) HTML so that you can browse it at your leisure.
+		
+				The LXR Linux cross-reference
+		If you want an online Linux cross reference, you'd check out http://lxr.linux.no, which should be fairly self-explanatory.
+		
+		[INTERMISSION]Let's talk about header files...
+				So what's to know about header files?
+		In the typical C program, you'll include a number of header files that contain, say, macros you're about to use or declarations
+	of routines you're about to call. These header files represent what you use in user space programming and normally match the 
+	functions that you're going to invoke from the standard C library. These header files normally reside under /usr/include/ 
+	directory and, are part of the libc6-dev package(responding to Ubuntu 10.04 system).
+	    Kernel code is going to work with the header files in the kernel source tree, many of which can be found in the top-level
+	include/ directory. 
+	    If you're programming in user space, you have all of the standard C library and header files at your disposal. While 
+	writing kernel code, you are working with the header files that come with the kernel source tree.
+	    
+		        Where else can you get those kernel header files?
+		If you're going to be writing loadable modules or any other code that runs in kernel space, you must have the kernel
+	header files against which to compile your code. git clone ... to get a full kernel source tree
+		On the other hand, what you really need is that portion of it that contains the header files and a few other things,
+	and most distributions provide a package that gives you exactly that. Under Ubuntu, "linux-headers-3.19.0-25-generic"(
+	or whatever matches your current kernel):
+		yanxu@ubuntu:~$apt-cache show linux-headers-3.19.0-25-generic
+			... snip ...
+			Description-en: Linux kernel headers for version 3.19.0 on 64 bit x86 SMP
+			This package provides kernel header files for version 3.19.0 on
+			x86 SMP.
+			.
+			This is for sites that want the latest kernel headers.  Please read
+			/usr/share/doc/linux-headers-3.19.0-25/debian.README.gz for details.
+	        ...
+	You can see where these kernel space header files would be installed with:
+	    yanxu@ubuntu:~$dpkg -L linux-headers-3.19.0-25-generic
+		    /.
+            /usr
+            /usr/src
+            /usr/src/linux-headers-3.19.0-25-generic
+            /usr/src/linux-headers-3.19.0-25-generic/.config
+            /usr/src/linux-headers-3.19.0-25-generic/scripts
+            /usr/src/linux-headers-3.19.0-25-generic/scripts/basic
+            ... snip ...
+		In short, if you want to do kernel programming, there is a package corresponding to each running kernel that you can 
+	install that provides the kernel space header files against which you can compile your loadable modules so that you don't
+	even need a full kernel source tree.
+	
+				Header files for both spaces
+		There times when you're programming for user space but you need header files that define kernel space structures since
+	you're going to be defining a structure that you want to pass into kernel space, almost certainly via a system call, and you
+	need to get a declaration for that structure somewhere, which leads us to introduce a third type of header file -- the kind
+	that are relevant for both kernel and user space.
+		Such header files are carefully selected from the header files in the kernel source tree, they're "cleaned", and they're
+	bundled into another package. At the top of the kernel source tree(~/repo/linux), simply run:
+	        $make distclean      [optional]
+		    $make headers_install
+	    at which point a carefully selected subset of the kernel header files scattered around the tree are collected, sanitized
+	and placed carefully under the kernel source tree directory usr/include/, where you can examine them with:
+			$ find usr/include | less
+				usr/include
+				usr/include/linux
+				usr/include/linux/virtio_9p.h
+				usr/include/linux/in_route.h
+				usr/include/linux/auxvec.h
+				usr/include/linux/sockios.h
+				usr/include/linux/joystick.h
+				usr/include/linux/netfilter_bridge
+				usr/include/linux/netfilter_bridge/ebt_802_3.h
+				... etc etc ...
+		What you're looking at in the output above is the collection of kernel header files that are also deemed to be appropriate
+	for user space programmers who want to, perhaps, define structures that they will be passing to kernel code. More to the 
+	point, these header files have already been packaged for you and are almost certainly on your system. For Ubuntu 10.04, 
+	this would be the linux-libc-dev package:
+	        $ dpkg -L linux-libc-dev
+                /.
+                /usr
+                /usr/include
+                /usr/include/asm-generic
+                /usr/include/asm-generic/errno-base.h
+                /usr/include/asm-generic/auxvec.h
+                /usr/include/asm-generic/bitsperlong.h
+                /usr/include/asm-generic/errno.h
+                /usr/include/asm-generic/fcntl.h
+                /usr/include/asm-generic/int-l64.h
+                ... and on and on ...
+		This is a package of header files that are available for inclusion in the user space space programs, but are meant only 
+	for defining kernel space structures and other information so that your user code and kernel code can share the same declarations
+	and definitions.
+	    
+		        And who decides which kernel header files are exported?
+		When you run "$make headers_install" from the top of your kernel source tree, who or what decides precisely which kernel 
+	header files will get bundled up and stashed under the kernel source directory usr/include for later "exporting" to user
+	space?
+	    The header files to be exported are defined by the Kbuild file scattered throughout the kernel source tree. The one at
+	the very top is the engine, while elsewhere throughout the tree, you'll find Kbuild files like this one:
+	    yanxu@ubuntu:~/repo/linux$cat include/Kbuild
+		    header-y += asm-generic/
+            header-y += linux/
+            header-y += sound/
+            header-y += mtd/
+            header-y += rdma/
+            header-y += video/
+            header-y += drm/
+            header-y += xen/
+            header-y += scsi/
+		That file simply defines that the export process should recursively continue into those subdirectories and keep checking
+	for more Kbuild files.
+	    $ cat include/linux/Kbuild
+            header-y += byteorder/
+            header-y += can/
+            header-y += dvb/
+            header-y += hdlc/
+            header-y += isdn/
+            ... snip ...
+            header-y += affs_hardblocks.h
+            header-y += aio_abi.h
+            header-y += arcfb.h
+            header-y += atmapi.h
+            header-y += atmarp.h
+            ... snip ...
+		which clearly represents a combination of more recursive directories, plus immediate header files. Quite simply, all 
+	kernel Kbuild files have that general structure and, collectively(throughout the entire kernel source tree), they define all
+	of the kernel header files to be exported to user space.
+	
+	            What does it mean to "sanitize" one of those header files?
+		In many cases, the header files to be exported contain some content that is meaningful only in kernel space, and it's 
+	only a subset of the header file that needs to be exported. Kernel-only code is normally surrounded by a preprocessor
+	conditional that checks the value of the _KERNEL_ macro, and part of the job of the export process(when you run "make 
+	headers_install") is to examine each file that is being exported, identify the code that is relevant only in kernel space,
+	and remove it.
+		That's why (for example) the kernel version of the header file include/video/edid.h looks like this:
+			#ifndef __linux_video_edid_h__
+			#define __linux_video_edid_h__
+
+			#if !defined(__KERNEL__) || defined(CONFIG_X86)
+
+			struct edid_info {
+				unsigned char dummy[128];
+			};
+
+			#ifdef __KERNEL__
+			extern struct edid_info edid_info;
+			#endif /* __KERNEL__ */
+
+			#endif
+
+			#endif /* __linux_video_edid_h__ */
+		but by the time it ends up in user space and is placed at /usr/include/video/edid.h, it looks like this:
+			#ifndef __linux_video_edid_h__
+			#define __linux_video_edid_h__
+
+			struct edid_info {
+				unsigned char dummy[128];
+			};
+
+			#endif /* __linux_video_edid_h__ */
+		Technically, there's no actual harm in leaving in that kernel-only content since, when you're compiling in user space,
+	you're guaranteed that the preprocessor macro _KERNEL_ will never be set, but it's cleaner to just strip out that irrelevant
+	content during the export process.
+		Aside: The Kbuild files contain both the variables header-y and unifdef-y to identify the header files to be sanitized 
+	and exported. The latter is now deprecated and Kbuild files should now contain only the first form, but the older form is
+	still supported.
+		
+		Lesson 14: What's in that module file, anyway?
+				Our sample loadable module
+		crash_elf.c 
+			/* Module source file 'crash_elf.c'. */
+
+			#include <linux/module.h>
+			#include <linux/init.h>
+			#include <linux/kernel.h>
+
+			static int whatever;
+			static int answer = 42;
+
+			static char __initdata elf_howdymsg[] = "Good day, eh?";
+			static char __exitdata elf_exitmsg[] = "Taking off, eh?";
+
+			void
+			useless(void)
+			{
+				printk(KERN_INFO "I am totally useless.\n");
+			}
+
+			static int __init elf_hi(void)
+			{
+				printk(KERN_INFO "module crash_elf being loaded.\n");
+				printk(KERN_INFO "%s\n", elf_howdymsg);
+				printk(KERN_INFO "The answer is %d.\n", answer);
+				return 0;
+			}
+
+			static void __exit elf_bye(void)
+			{
+				printk(KERN_INFO "module crash_elf being unloaded.\n");
+				printk(KERN_INFO "%s\n", elf_exitmsg);
+				printk(KERN_INFO "The answer is now %d.\n", answer);
+			}
+
+			module_init(elf_hi);
+			module_exit(elf_bye);
+
+			MODULE_AUTHOR("Yan Xu");
+			MODULE_LICENSE("GPL");
+		
+				What is this "ELF" thing of which you speak?
+		$ file crash_elf.ko
+            crash_elf.ko: ELF 64-bit LSB relocatable, x86-64, version 1 (SYSV), not stripped
+		The above tells us that this is an ELF-format file, that it was compiled for a 64-bit architecture, and that it is not
+	"stripped", suggesting that it still has symbol table information that will be useful for later debugging.
+		More specifically, the "ELF" part means that the file itself comes in sections, the most common ones being the ones you're
+	probably familiar with:
+		*the "text" section: the executable code itself,
+		*the "data" section: initialized data, and
+		*the "BSS" section: "Block Started by Symbol" or, as most people know it, uninitialized data which--unlike the first two
+		sections -- takes up no space in the executable file and is allocated only at run time.
+		
+		The entire symbol table for the running kernel can be examined with:
+		    $cat /proc/kallsyms | grep ...
+		
+				All that __init stuff and how it's processed
+		__init and __exit allowed the module loader to be more space-efficient by discarding routines when they were either no 
+	longer needed, or never needed in the first place. 
+	    Once the initialization us done, you have no need for that table any more so there's no point letting it hang around
+    in kernel space, wasting RAM. So tag it as __initdata, at which point it's deleted once module initialization is complete.		
+		
+		        Tearing apart your loadable module file
+		yanxu@ubuntu:~/modules_yan/crash_elf$objdump --section-headers crash_elf.ko
+		    crash_elf.ko:     file format elf64-x86-64
+
+            Sections:
+            Idx Name          Size      VMA               LMA
+            0 .note.gnu.build-id 00000024  000000000000000
+                              CONTENTS, ALLOC, LOAD, READONLY, DATA
+            1 .text         0000001c  0000000000000000
+                              CONTENTS, ALLOC, LOAD, RELOC, READONLY, CODE
+            2 .exit.text    00000041  0000000000000000
+                              CONTENTS, ALLOC, LOAD, RELOC, READONLY, CODE
+            3 .init.text    0000003e  0000000000000000
+                              CONTENTS, ALLOC, LOAD, RELOC, READONLY, CODE
+            4 .rodata.str1.8 0000004b  0000000000000000
+                              CONTENTS, ALLOC, LOAD, READONLY, DATA
+            5 .rodata.str1.1 00000051  0000000000000000
+                              CONTENTS, ALLOC, LOAD, READONLY, DATA
+            6 .modinfo      000000b7  0000000000000000
+                              CONTENTS, ALLOC, LOAD, READONLY, DATA
+            7 __mcount_loc  00000008  0000000000000000
+                              CONTENTS, ALLOC, LOAD, RELOC, READONLY, DATA
+            8 __versions    000000c0  0000000000000000
+                              CONTENTS, ALLOC, LOAD, READONLY, DATA
+            9 .data         00000000  0000000000000000
+                              CONTENTS, ALLOC, LOAD, DATA
+            10 .exit.data    00000010  0000000000000000
+                              CONTENTS, ALLOC, LOAD, DATA
+            11 .init.data    0000000e  0000000000000000
+                              CONTENTS, ALLOC, LOAD, DATA
+            12 .gnu.linkonce.this_module 00000250  0000000000000000
+                              CONTENTS, ALLOC, LOAD, RELOC, DATA, LINK_ONCE_DISCARD
+            13 .bss          00000000  0000000000000000
+                              ALLOC
+            14 .note.GNU-stack 00000000  0000000000000000
+                              CONTENTS, READONLY, CODE
+            15 .comment      00000048  0000000000000000
+                              CONTENTS, READONLY
+		Depending on how you tag your routines and data objects, those routines and objects will be placed in different ELF
+	"sections" in the final loadable module file so that the kernel module loader can treat that content appropriately -- for
+	example discarding the entire .init.data and .init.text sections once the module is loaded.
+	    You can examine the entire symbol table of your module with:
+		    $objdump -t crash_elf.ko
+		or pick on individual sections with:
+		    $ objdump -t -j .init.data crash_elf.ko
+            $ objdump -t -j .init.text crash_elf.ko
+            $ objdump -t -j .exit.data crash_elf.ko
+            $ objdump -t -j .exit.text crash_elf.ko 
+			
+			    So how do those "sections" work again?
+		How all this tagging identifies into which sections different content will be placed is in the kernel header file 
+	include/linux/init.h :
+	        ...
+            #define __init          __section(.init.text) __cold notrace
+            #define __initdata      __section(.init.data)
+            #define __initconst     __section(.init.rodata)
+            #define __exitdata      __section(.exit.data)
+            #define __exit_call     __used __section(.exitcall.exit)
+            ...
+		
+		[INTERMISSION]Building a new Ubuntu 14.04 kernel
+		        Building another kernel for Ubuntu? But why?
+		For the purposes of future, we need to build a fairly current kernel for Ubuntu 14.04 so that:
+		    *we get the corresponding vmlinux file for that kernel for debugging purposes, and
+			*the new kernel can handle the root filesystem being on a logical volume, not just in a regular filesystem
+		For the second condition:
+		    *will produce a suitably bleeding edge kernel
+			*works just fine for both 32- and 64-bit systems,
+			*generates a kernel that can mount a root filesystem that is either a regular ext* filesystem or lives inside a 
+		    logical volume, and,
+			*creates actual packages that can be installed and uninstalled conveniently
+			*gives us the corresponding raw, uncompressed vmlinux file that can be used for debugging later.
+		
+		        The necessary packages
+		$sudo apt-get install git-core kernel-package fakeroot build-essential libncurses5-dev
+		
+		        How much will you need to download and copy?
+		Before compiling, we need the following contents and space:
+		yanxu@ubuntu:~/k2$du -ks *
+		    886460	linux-3.19
+            969088	ubuntu-maverick
+            1996	ubuntu-package
+		
+		        The linux-3.19/ directory
+		For we have a checkout for linux.git, so just $cd ~/repo/linux
+		Then from its top-level directory, prep it as follows:
+		    yanxu@ubuntu:~/repo/linux$ cp /boot/config-$(uname -r) .config
+            yanxu@ubuntu:~/repo/linux$ yes '' | make oldconfig
+            yanxu@ubuntu:~/repo/linux$ make menuconfig   [optional]
+            yanxu@ubuntu:~/repo/linux$ make-kpkg clean
+        The only reason for "make menuconfig" is to absolutely guarantee that you've selected the kernel configuration parameters
+    CONFIG_PROC_KCORE and CONFIG_DEBUG_INFO for later debugging.
+        $ make-kpkg clean is a Debian-specific command for cleaning the source tree and, at that point, you've sufficiently
+    prepped the generic Linux kernel source tree for your Ubuntu build. 		
+		
+		        Downloading the Ubuntu Maverick kernel tree
+		For this recipe, you're also going to need to checkout the Ubuntu-specific Maverick kernel tree:
+			$ git clone git://kernel.ubuntu.com/ubuntu/ubuntu-maverick.git
+		For I have a ubuntu-trusty.git, the above command can be ignored.
+			yanxu@ubuntu:~/repo_ubuntu$ cp -a /usr/share/kernel-package ubuntu-package
+			yanxu@ubuntu:~/repo_ubuntu$ cp ubuntu-trusty/debian/control-scripts/{postinst,postrm,preinst,prerm} ubuntu-package/pkg/image/
+			yanxu@ubuntu:~/repo_ubuntu$ cp ubuntu-trusty/debian/control-scripts/headers-postinst ubuntu-package/pkg/headers/
+		
+				Finally, building that new kernel
+		yanxu@ubuntu:~/repo_ubuntu/ubuntu-trusty$make-kpkg clean
+		yanxu@ubuntu:~/repo_ubuntu/ubuntu-trusty$CONCURRENCY_LEVEL=`getconf _NPROCESSORS_ONLN` \
+			fakeroot make-kpkg --initrd --append-to-version=-rday \
+			--overlay-dir=~/repo_ubuntu/ubuntu-package kernel_image kernel_headers
+			
+				And if it worked?
+		If all that worked and your build terminates successfully, what you should now find in the parent directory are a 
+	couple of installable packages along the lines of:
+		    yanxu@ubuntu:~/repo_ubuntu$ls
+			    linux-headers-3.13.11-ckt39-rday+_3.13.11-ckt39-rday+-10.00.Custom_amd64.deb
+                linux-image-3.13.11-ckt39-rday+_3.13.11-ckt39-rday+-10.00.Custom_amd64.deb
+		There is a + behind the version, (this is a known bug and involves how the kernel source scripts create the version 
+	number for the kernel about to be built. If your stock kernel tree is not currently sitting at a tagged commit, a versioning
+	script loves to add a trailing "+" to the version string to show that, but that messes up the Ubuntu version comparison test)
+	then 		
+			yanxu@ubuntu:~/repo_ubuntu/ubuntu-trusty$git tag -l 
+			    ...
+                Ubuntu-3.13.0-99.146
+				...
+            yanxu@ubuntu:~/repo_ubuntu/ubuntu-trusty$git checkout Ubuntu-3.13.0-99.146
+			yanxu@ubuntu:~/repo_ubuntu/ubuntu-trusty$make-kpkg clean
+		    yanxu@ubuntu:~/repo_ubuntu/ubuntu-trusty$CONCURRENCY_LEVEL=`getconf _NPROCESSORS_ONLN` \
+			    fakeroot make-kpkg --initrd --append-to-version=-rday \
+			    --overlay-dir=~/repo_ubuntu/ubuntu-package kernel_image kernel_headers
+		The output is the same.
+
+		at which point, you would want to install them:
+		    yanxu@ubuntu:~/repo_ubuntu$sudo dpkg -i linux*deb
+		and reboot to that new kernel.
+		
+		        Apparently, it worked
+		yanxu@ubuntu:~$uname -r
+		    3.13.11-ckt39-rday+
+		And, just as important, if I check the top of the stock kernel source tree that I used for the build, I have my unstripped,
+	vmlinux file:
+	    yanxu@ubuntu:~/repo_ubuntu/ubuntu-trusty$ls -l vmlinux
+		    -rwxrwxr-x  1 yanxu yanxu 154888356 Dec 14 17:45 vmlinux
+		
+		Lesson 15: Debugging your kernel and modules with gdb
+		        What do you need first?
+		You need to be running under a new kernel that's been configured and built with configuration CONFIG_PROC_KCORE and 
+	CONFIG_DEBUG_INFO, as well as having the raw, uncompressed vmlinux kernel image file that was generated when you built your 
+	current kernel.
+		You'll need the debugger as well:
+			yanxu@ubuntu:~$sudo apt-get install gdb 
+		A good deal of this lesson is based on Chapter 4 of "Linux Device Drivers"(3rd ed).
+
+				So what exactly are we about to do?
+		What we're going to do is use what is normally a userspace debugger(gdb) to peek through the address space of a running
+	kernel. You'll be using gdb only to examine the contents of kernel space -- you won't have the ability to do things like set
+	breakpoints or single-step through kernel code. But for a lot of cases, simply being able to view the data in kernel space
+	in real-time is enough.
+	
+	            Getting ready...
+		$gdb [executable-file] [core dump image]
+		Your raw, uncompressed vmlinux file is the executable file, while the proc file /proc/kcore acts as your (kernel space)
+	core file. Copy vmlinux file to /tmp for brevity, your debugging incantation for a running kernel is simply:
+            yanxu@ubuntu:~$sudo gdb /tmp/vmlinux /proc/kcore
+
+                How many loops per jiffy? Let's find out.
+		From the kernel source file init/main.c, we have the variable definition:
+		    unsigned long loops_per_jiffy = (1<<12);
+            EXPORT_SYMBOL(loops_per_jiffy);
+		So what does that tell us? It tells us three things:
+		    *that variable is of type "unsigned long"
+			*it has a defined value of "1<<12" or 4096, and
+			*it's been exported so it's available to the rest of kernel space and to loadable modules.
+			
+		First, you can see the entire kernel address space in the file /proc/kallsyms:
+		    yanxu@ubuntu:~$grep loops_per_jiffy /proc/kallsyms
+			    0000000000000000 d cpu_loops_per_jiffy
+			    0000000000000000 R __ksymtab_loops_per_jiffy
+                0000000000000000 r __kcrctab_loops_per_jiffy
+                0000000000000000 r __kstrtab_loops_per_jiffy
+                0000000000000000 D loops_per_jiffy
+                0000000000000000 b loops_per_jiffy_ref
+		And, finally, if your gdb session is running properly, we can:
+		    yanxu@ubuntu:~$sudo gdb /tmp/vmlinux /proc/kcore
+			    ... snip ...
+                (gdb) whatis loops_per_jiffy
+                type = unsigned long 
+                (gdb) p loops_per_jiffy
+                $1 = 11704120    //the value should be 4096
+                (gdb) 
+        	
+                The kernel symbol types
+        Note from the above that that particular variable has a type of "D", which inspires the question -- what does that mean?
+		yanxu@ubuntu:~$man nm
+			... snip ...
+            If lowercase, the symbol is local; if uppercase, the symbol is global (external).
+            ... snip ...
+            "B"
+            "b" The symbol is in the uninitialized data section (known as BSS).
+            ... snip ...
+            "D"
+            "d" The symbol is in the initialized data section.
+            ... and so on and so on ...
+		So this tells us(correctly) that that variable is in the initialized data section, and that it's global; that is, it's been
+	exported -- all very useful information you can glean from looking at the contents of /proc/kallsyms.
+	    It also tells us that we can even examine kernel data objects that haven't been exported, which means that even when our
+	loadable modules don't have access to a variable or object, we can still examine them with gdb -- a very handy property.
+	    For deep learning, we need to read the gdb docs. As a start, we can:
+		    (gdb) help
+            List of classes of commands:
+
+            aliases -- Aliases of other commands
+            breakpoints -- Making program stop at certain points
+            data -- Examining data
+            files -- Specifying and examining files
+            internals -- Maintenance commands
+            obscure -- Obscure features
+            running -- Running the program
+            stack -- Examining the stack
+            status -- Status inquiries
+            support -- Support facilities
+            tracepoints -- Tracing of program execution without stopping the program
+            user-defined -- User-defined commands
+
+            Type "help" followed by a class name for a list of commands in that class.
+            Type "help all" for the list of all commands.
+            Type "help" followed by command name for full documentation.
+            Type "apropos word" to search for commands related to "word".
+            Command name abbreviations are allowed if unambiguous.
+            (gdb) help data
+            ... lots of snip here, you get the idea ...
+	
+	            Dumping more complicated structures
+		As long as you compiled the running kernel with CONFIG_DEBUG_INFO, you have the ability to dump the contents of some 
+	fairly complicated structures. For example, from the header file include/linux/init_task.h, we have a macro that defines a 
+	sizable task_struct structure:
+	        #define INIT_TASK(tsk)  \
+            {                                             \
+                .state          = 0,                      \
+                .stack          = &init_thread_info,      \
+                .usage          = ATOMIC_INIT(2),         \
+                .flags          = PF_KTHREAD,             \
+                .lock_depth     = -1,                     \
+            ... and on and on ...
+	    From the source file arch/x86/kernel/init_task.c, we have the definition of init_task:
+		    /*
+            * Initial task structure.
+            *
+            * All other task structs will be allocated on slabs in fork.c
+            */
+            struct task_struct init_task = INIT_TASK(init_task);
+            EXPORT_SYMBOL(init_task);
+	    From /proc/kallsyms, we have:
+		    $ grep init_task /proc/kallsyms
+                ffffffff810c9980 T ftrace_graph_init_task
+                ffffffff810ecb30 T perf_event_init_task
+                ffffffff817fee60 r __ksymtab_init_task
+                ffffffff81813e00 r __kcrctab_init_task
+                ffffffff8181e5d0 r __kstrtab_init_task
+                ffffffff81a32020 D init_task          <-- there it is
+                ffffffff81bcdec0 B init_task_group
+		And, finally, from our debugging session, we can examine the contents of that structure instance with:
+		    (gdb) whatis init_task
+            type = struct task_struct
+            (gdb) p init_task
+            $1 = {state = 0, stack = 0xffffffff81a00000, usage = {counter = 2}, flags = 2097152, 
+              ptrace = 0, lock_depth = -1, prio = 120, static_prio = 120, normal_prio = 120, 
+              rt_priority = 0, sched_class = 0x0, se = {load = {weight = 0, inv_weight = 0}, 
+                run_node = {rb_parent_color = 0, rb_right = 0x0, rb_left = 0x0}, group_node = {
+            ...and on and on ...
+			
+		        Dumping kernel data that is constantly changing
+        Unsurprisingly, the whole point of dumping data from kernel space is that you want to see the value of that data in real
+    time. But gdb doesn't work that way.
+        Instead, for efficiency, gdb caches the data from the core file at start time, so if you tried to print, say, the value of 
+    the constantly-changing jiffies variable, you'd see:
+            (gdb) p jiffies
+            $1 = 4326983804
+            (gdb) p jiffies
+            $2 = 4326983804
+            (gdb) p jiffies
+            $3 = 4326983804
+            (gdb) p jiffies
+            $4 = 4326983804
+            (gdb)	
+        In order to refresh, you need to reload the core file with:
+            (gdb) core-file /proc/kcore
+            (gdb) p jiffies
+            $5 = 4327109350		
+
+			    Debugging your loadable modules
+		And this is the part we've been working up to -- how to use gdb to similarly debug your loadable (and loaded) modules. 
+	Consider the following sample module crash_gdb.c:
+	        #include <linux/module.h>
+            #include <linux/init.h>
+            #include <linux/kernel.h>
+
+            static int trista_1;
+            int trista_2 = 20;
+            int trista_3 = 30;
+
+            EXPORT_SYMBOL(trista_3);
+
+            static int __init gdb_hi(void)
+            {
+                printk(KERN_INFO "Module crash_gdb being loaded.\n");
+                return 0;
+            }
+
+            static void __exit gdb_bye(void)
+            {
+                printk(KERN_INFO "Module crash_gdb being unloaded.\n");
+            }
+
+            module_init(gdb_hi);
+            module_exit(gdb_bye);
+
+            MODULE_LICENSE("GPL");
+            MODULE_DESCRIPTION("Module debugging with gdb."); 
+        Verify that none of those symbols are in the kernel symbol table:
+		    yanxu@ubuntu:~/modules_yan/crash_gdb$grep trista /proc/kallsyms
+			yanxu@ubuntu:~/modules_yan/crash_gdb$
+		Ok, nothing there. Now start a debugging session:
+		    $ gdb /tmp/vmlinux /proc/kcore
+		and this is where the fun starts. Load the module, and verify that the appropriate data objects are now in kernel space:
+		    yanxu@ubuntu:~/modules_yan/crash_gdb$make
+			yanxu@ubuntu:~/modules_yan/crash_gdb$sudo insmod crash_gdb.ko
+            yanxu@ubuntu:~/modules_yan/crash_gdb$grep trista /proc/kallsyms
+                0000000000000000 r __kstrtab_trista_3  [crash_gdb]
+                0000000000000000 r __kcrctab_trista_3  [crash_gdb]	
+                0000000000000000 r __ksymtab_trista_3  [crash_gdb]	
+                0000000000000000 D trista_3  [crash_gdb]
+                0000000000000000 d trista_2  [crash_gdb]
+
+        Lesson 16: Let's talk about devices.
+                The first step in writing a character driver
+        Note also that writing a character driver is part of this first course in kernel programming, but writing more specific 
+    drivers like a PCI or USB driver will come as separate courses some time down the road.
+
+				WHY start with a character driver?
+		As the authors of LDD3 explain it:
+		The goal of this chapter is to write a complete char device driver. We develop a character driver because this class is 
+	suitable for most simple hardware devices. Char drivers are also easier to understand than block drivers or network drivers
+	(which we get to in later chapters).
+	    Ergo, we're starting here, and also because much of what happens here will also apply to writing other, more complicated,
+	types of drivers.
+	
+	            The basics of device files
+		$ ls -l /dev
+            crw-rw----+ 1 root audio    14,  12 2010-07-07 16:05 adsp
+			crw-------  1 root video    10, 175 2010-07-07 16:05 agpgart
+			crw-rw----+ 1 root audio    14,   4 2010-07-07 16:05 audio
+			drwxr-xr-x  2 root root         660 2010-07-07 16:05 block
+			drwxr-xr-x  2 root root          80 2010-07-07 16:05 bsg
+			drwxr-xr-x  3 root root          60 2010-07-07 16:05 bus
+			lrwxrwxrwx  1 root root           3 2010-07-07 16:05 cdrom -> sr0
+			lrwxrwxrwx  1 root root           3 2010-07-07 16:05 cdrw -> sr0
+			drwxr-xr-x  2 root root        3320 2010-07-07 16:05 char
+			crw-------  1 root root      5,   1 2010-07-07 16:05 console
+			lrwxrwxrwx  1 root root          11 2010-07-07 16:05 core -> /proc/kcore
+			... snip ...
+		For people new to /dev, those files are not device drivers as some people (erroneously) like to refer to them -- they 
+	are simply special kinds of files that, in a way, refer mainly to device driver code running in kernel space.
+		The most common types of special files you'll find there are block("b") and character ("c") special files, with a few
+	directories and symlinks thrown in to add some aesthetic organization to the lot, but it's those first two types of special 
+	files that we care about since accessing them in particular ways gives us access to the underlying device driver that is 
+	allegedly handling the device to which that file corresponds. In short, given a properly written character device, accessing
+	its corresponding device file with read and write operations will, ultimately, translate into I/O operations on the device 
+	itself.
+		And how does that mapping happen?
+		
+				Major and minor numbers
+		When you attempt(from user space) to access a character device by operating on its special device file, the actual name of
+	the device file is irrelevant -- all that matters are the major and minor numbers attached to that device file, because its
+	those two values that uniquely determine what kernel code you're trying to access, and how.
+	    As an example:
+		    $ ls -l /dev/sr0
+                brw-rw----+ 1 root cdrom 11, 0 Dec 14 21:22 /dev/sr0
+		What it clearly represents is my CD-ROM device, so if I wanted to access a CD-ROM, I would have to mount the device by its 
+	special file name /dev/sr0. And from the above, you can see that the device's major device number is 11. What that means is 
+	that, somewhere in kernel space, there is driver code that knows how to talk to my CD-ROM, and the unique way to refer to that
+	driver code from user space is to specify the major number of 11. Got that? CD-ROM driver is accessible via (block) device 
+	file with major number 11.
+	    And what about the minor number 0? While a device file's major number typically identifies the driver code for that device,
+	the minor number more specifically identifies how you want to talk to that device or, more commonly, it identifies one of a 
+    number of equivalent instances of that device. For instance, if my system had two CD-ROM devices, it's almost a guarantee that
+	I would see:
+	        $ ls -l /dev/sr*
+                brw-rw----+ 1 root cdrom 11, 0 Dec 14 21:22 /dev/sr0
+				brw-rw----+ 1 root cdrom 11, 0 Dec 14 21:22 /dev/sr1
+	or something like that where (unsurprisingly) exactly the same driver would be used to access both devices, but the minor 
+	number number is used to identify which CD-ROM drive I'm talking to. But wait -- there's more.
+	    Because the canonical name of a device is sometimes ugly and incomprehensible, it's typical to have one or more symlinks
+	to that device file, simply for convenience. For my CD-ROM, I can check that with:
+	        $ ls -l /dev | grep sr0
+                lrwxrwxrwx  1 root root           3 DEC 14 21:22 cdrom -> sr0
+	            brw-rw----+ 1 root cdrom    11,   0 DEC 14 21:22 sr0
+        In short, to access my CD-ROM, I can use the canonical name for the device file, or I can use any of those symlinks just
+	as easily.
+	    
+		        Do devices for all those device files actually exist?
+		Historically, the contents of the /dev directory were static -- pre-loaded when you installed your OS -- so you typically
+	had a /dev directory with thousands upon thousands of device files, even for devices you didn't even have; the Linux distro 
+	was just playing it safe. And it wasn't that big a deal since device files are actually quite small; in fact, they don't take
+	up any data space at all on the disk, they just cost you an inode. But even though they didn't cost much in terms of space,
+	it was still wasteful and messy to have a special device for every imaginable device.
+		These days, the /dev directory is almost certainly generated dynamically, probably by the udev facility, so that when you
+	examine the contents of /dev, it's much more likely that what you see corresponds to what's actually on the system. But there
+	is a better way to tell what drivers have registered with which major numbers on the Linux system -- the /proc/devices file:
+			$ cat /proc/devices
+				Character devices:
+					1 mem
+					4 /dev/vc/0
+					4 tty
+					4 ttyS
+					5 /dev/tty
+					5 /dev/console
+					5 /dev/ptmx
+					6 lp
+					7 vcs
+					... snip ...
+				Block devices:
+					1 ramdisk
+				  259 blkext
+					7 loop
+					8 sd
+					9 md
+				   11 sr
+				  ... snip ...
+		The contents of the /proc/devices file is the primary source to tell you what drivers are registered, and at what major
+	numbers, and you can see that, sure enough, the block device major number 11 appears to be associated with the "sr" driver -- 
+	there's my CD-ROM.
+		Some quick tips about the above:
+			*There is no connection between a block device and a character device having the same major number.
+			*Notice that it's possible for more than one driver to register with the same major number, as long as they register
+				for different minor numbers(although that last part isn't obvious since the /proc/devices doesn't list minor 
+				numbers).
+			*When you finally write and load your first character driver, it should be obvious that an entry for it is going to
+				show up in that file as well -- we'll talk more about that when we get to it.
+				
+				What "devices" look like in kernel space
+		At this point, we can look at the internal (kernel space) representation of device numbers, and we can start in the kernel
+	header file include/linux/types.h:
+			typedef __u32 __kernel_dev_t;
+			typedef __kernel_dev_t          dev_t;
+	which tells us that a typedef for a "device" in kernel space is an unsigned 32-bit value, and it's of type dev_t, at which 
+	point the header file include/linux/kdev_t.h tells us everything else we need to know, starting with:
+
+			#define MINORBITS       20
+			#define MINORMASK       ((1U << MINORBITS) - 1)
+
+			#define MAJOR(dev)      ((unsigned int) ((dev) >> MINORBITS))
+			#define MINOR(dev)      ((unsigned int) ((dev) & MINORMASK))
+			#define MKDEV(ma,mi)    (((ma) << MINORBITS) | (mi))
+		It should be obvious what the above is telling you -- that a device type identifier is represented by a type of dev_t, 
+	that it's 32 bits long, and that it's partitioned into a leading 12-bit major number, plus a 20-bit minor number. Also, that 
+	you're not supposed to know about the 20 bits part and that all management of that kernel type should be done via those 
+	macros so the partitioning can change without notice and you'll never have to worry about it.
+
+		Lesson 17: Your first character device driver
+				The grand plan for your character device driver
+		We're going to start by writing a simple character driver that does, effectively, nothing -- it will load, sit there and 
+	be completely useless, at which point we'll unload it and, over the course of the next few lessons, we'll add features to it
+	little by little.
+		And what features are we going to add? Depending on what you want your driver to do, we can register routines for the 
+	driver that let you:
+		*read from it,
+		*write to it,
+		*seek on it,
+		*run ioctl() commands on it to control it in various ways,
+		*mmap() its memory into user space,
+		and much more, and we'll do it all a bit at a time so you don't get overwhelmed.
+		And, finally, you'll be doing all of the above via the device file that corresponds to your driver so that, if you wanted 
+	to define what it meant to "read" data from your driver, you would (in user space) do something as simple as:
+			$ cat /dev/mychardrv  [or whatever you wanted to call it]
+		and your driver would have to know what it meant to be "read from," at which point it would pass back to user space, well,
+	the "data" being read. If that sounds suspiciously like readable proc files from an earlier lesson, that's exactly what it's 
+	going to look like.
+
+		Finally, if you recall how you could interact with your loadable modules via module parameters or proc files, you can 
+	certainly still add those to your character driver, but that's independent of what we'll be talking about here. You'll see 
+	what I mean quickly enough.
+
+				That dev_t structure again
+		As a quick refresher, recall that your drivers and device files are going to use a combination of major and minor device 
+	number for identification, where the appropriate typedef and macros to manipulate it is defined in the kernel header files 
+	include/linux/types.h:
+
+			typedef __u32 __kernel_dev_t;
+			typedef __kernel_dev_t          dev_t;
+
+		and include/linux/kdev_t.h:
+
+			#define MINORBITS       20
+			#define MINORMASK       ((1U << MINORBITS) - 1)
+
+			#define MAJOR(dev)      ((unsigned int) ((dev) >> MINORBITS))
+			#define MINOR(dev)      ((unsigned int) ((dev) & MINORMASK))
+			#define MKDEV(ma,mi)    (((ma) << MINORBITS) | (mi))
+			
+		In short, the combination of a major and minor device number in kernel space is represented by a (12,20)-bit partitioning 
+	of an unsigned (32-bit) int, but you should never take advantage of that knowledge and you should always use the typedef and 
+	corresponding macros to create and interpret information like that.
+
+				The two steps of character device registration
+		As you're about to see, there are two basic steps to writing, compiling and loading your first character driver, then 
+	getting access to it. Those steps are:
+		*When you load your character driver module, one of its initialization steps will be to "register" itself with the kernel 
+			at a particular major device number and one or more minor device numbers.
+		*Independently, in user space, it will be your responsibility to create in /dev the corresponding character device file 
+			with the matching major and minor number that will act as your "gateway" to that driver.
+		Note carefully how (for the time being) those are two independent operations -- you're free to create and load a character
+	driver that registers itself in the kernel at a specific major and minor device number but, if you don't have the matching 
+	special device file in user space, that driver is not going to do you much good.
+
+				Creating a special device file with mknod
+		Eventually, once you've loaded your character driver, you'll need to (manually for now) create the character special 
+	device file with the matching major and minor device number as your way of accessing your driver. And even though you have no 
+	driver yet, this is how you would do it.
+		Let's create a sample device file that won't conflict with any currently-loaded character drivers, so (on my system):
+			$ cat /proc/devices
+				Character devices:
+					1 mem
+					4 /dev/vc/0
+					4 tty
+					4 ttyS
+					5 /dev/tty
+					5 /dev/console
+					5 /dev/ptmx
+					... snip ...
+				  180 usb
+				  189 usb_device
+				  226 drm
+				  251 hidraw
+				  252 usbmon
+				  253 bsg
+				  254 rtc
+
+		The above list shows loaded character and their major numbers, so let's pick a number that's free -- say, 199, with 
+	arbitrary minor device number zero -- and, using root privilege, create a special device file that would correspond to a 
+	driver registered at that major and minor number:
+			$ sudo mknod /dev/mychardev c 199 0
+			$ ls -l /dev/mychardev
+				crw-r--r-- 1 root root 199, 0 Dec 22 23:02 /dev/mychardev
+			$
+		It should be clear that the above command created a character device file with a given major and minor number (199 and 0),
+	and you'll use this mknod command later to create the device file for your driver, but what does it mean to create such a file
+	when there's no such driver behind it? Nothing:
+			$ cat /dev/mychardev
+				cat: /dev/mychardev: No such device or address
+			$
+		In short, you're free to create whatever character device file you want, but they won't have any value unless there's a 
+	matching driver in kernel space to "back it up," as it were. In any event, let's just get rid of that file since it clearly 
+	isn't going to do us any good at the moment:
+			$ sudo rm /dev/mychardev
+		Now let's talk about the driver you're about to write.
+
+		Exercise for the student: Linux kernel guru Greg Kroah-Hartman reminds me that I shouldn't just cavalierly suggest using 
+	any currently unused character major number (like 199) as a test for the above since a lot of major numbers are officially 
+	allocated to some devices. Take a look at the kernel tree documentation file Documentation/devices.txt, where you'll notice 
+	the snippet:
+
+			199 char        Veritas volume manager (VxVM) volumes
+					0 = /dev/vx/rdsk/*/*          First volume
+					1 = /dev/vx/rdsk/*/*          Second volume
+					...
+		which means that if you unthinkingly use that major number for a test and you have that proprietary driver installed, ugly
+	things might happen.
+
+		Greg suggests that you stick to playing with major numbers (defined in that same file):
+			240-254 char    LOCAL/EXPERIMENTAL USE
+		In the end, the only rule is to not test with major device numbers that are clearly allocated and already mentioned in 
+	/proc/devices.
+
+				Allocating and freeing character device numbers
+		One of the most important things your character driver will do is "register" with the kernel at a major and minor device 
+	(or possibly, more than one minor number), and I'm going to make this short.
+		The routine prototypes for doing this can be seen in the kernel header file include/linux/fs.h:
+			extern int alloc_chrdev_region(dev_t *, unsigned, unsigned, const char *);
+			extern int register_chrdev_region(dev_t, unsigned, const char *);
+			extern void unregister_chrdev_region(dev_t, unsigned);
+			static inline void unregister_chrdev(unsigned int major, const char *name)
+		Historically, the register_chrdev_* routines were used to register a driver at a specific major number, but because you 
+	could never predict if anyone else registered at that number already, the newer (and strongly encouraged) technique is to use 
+	alloc_chrdev_region(), which (as you'll see shortly) simply asks the registration code to give you some available major number,
+	which you can query quickly enough from user space. Again, let me emphasize -- using the older register_chrdev_* routines to 
+	demand a specific major number is strongly discouraged, so we'll ignore it from now on.
+		And at this point, let's look at a sample driver.
+		
+				Character driver -- pass one
+		Here's your first (trivial) character driver -- chardrv.c:
+
+			#include <linux/module.h>
+			#include <linux/init.h>
+			#include <linux/kernel.h>
+
+			#include <linux/types.h>   // for dev_t typedef
+			#include <linux/kdev_t.h>  // for format_dev_t
+			#include <linux/fs.h>      // for alloc_chrdev_region()
+
+			static dev_t mydev;             // (major,minor) value
+			static char buffer[64];         // optional, for debugging
+
+			static int __init chardrv_in(void)
+			{
+				printk(KERN_INFO "module chardrv being loaded.\n");
+
+				alloc_chrdev_region(&mydev, 0, 1, "trista");
+				printk(KERN_INFO "%s\n", format_dev_t(buffer, mydev));
+
+				return 0;
+			}
+
+			static void __exit chardrv_out(void)
+			{
+				printk(KERN_INFO "module chardrv being unloaded.\n");
+
+				unregister_chrdev_region(mydev, 1);
+			}
+
+			module_init(chardrv_in);
+			module_exit(chardrv_out);
+
+			MODULE_AUTHOR("Yan Xu");
+			MODULE_LICENSE("GPL");
+		Obviously, set it up in a new directory, create a matching Makefile, run make to ensure that it builds, and now let's talk
+	about it.
+		$cat /proc/devices | grep trista
+			250 trista
+		
+		Exercise for the student: Without even discussing what the above is doing yet, compile the module and load it, verify that
+	doing that adds the appropriate character device entry to the /proc/devices file, then unload the module. We're obviously not 
+	done talking about this but, at the very least, verify that this simple exercise works for you.
+
+				So ... let's talk about that code, shall we?
+		Assuming you've verified that you can build and load that modular (and trivial) "character" driver, let's step through 
+	the code one line at a time so you understand what just happened there.
+		Beyond the standard header files you're used to by now, the additional header files are for the character driver-related 
+	content and routines you're about to use.
+		This declaration:
+			static dev_t mydev;
+		as you already know, is the typedef to be used to represent a combination of major and minor device number, and you should
+	only ever use that typedef and the appropriate macros to manipulate that data object. While you might know that that typedef 
+	is actually a 32-bit unsigned int, none of your code should ever take advantage of that.
+
+		The next declaration:
+			static char buffer[64];
+		is quite optional, and is used later only for pretty printing the contents of the dev_t object. You'll see what I mean 
+	shortly. And here's where the good stuff starts.
+
+		Register for at least one character major and minor device number:
+			alloc_chrdev_region(
+				&mydev,  // the address of the dev_t object to put the results
+				0,       // the starting minor number to allocate
+				1,       // how many minor numbers to allocate
+				"trista"   // the name shown in /proc/devices
+			);
+		What the above does should be obvious -- you're asking to register your character driver at some available major device 
+	number, starting with minor device number zero, and asking for a single minor number (obviously, you can ask for more, which 
+	we'll get into in a later lesson). As long as that succeeds, you should see the result in the /proc/devices file, which will 
+	tell you which major device number you were allocated.
+
+		Next, purely for debugging purposes, you can print the result of the allocation to your /var/log/messages file with:
+			printk(KERN_INFO "%s\n", format_dev_t(buffer, mydev));
+
+		And, finally, at module unload time, it's your responsibility to unregister your character driver:
+			unregister_chrdev_region(mydev, 1);
+		where the mydev variable knows the major device number and starting minor device number, and all you need to do is supply 
+	how many minor device numbers you asked for in the first place (in this case, one).
+
+		Exercise for the student: Tweak the sample program to ask for several minor device numbers, not just one, and check the 
+	resulting difference in the /proc/devices file after you load the module. Make sure you unregister precisely that number of 
+	minor device numbers in the module's exit routine.
+
+		By the way, make sure you understand that you can't do anything with that character "driver" yet. It's in subsequent 
+	lessons where you'll learn how to add read and write and ioctl functionality to your "driver."
+
+				What can possibly go wrong?
+		It should be obvious that you should never count on your device number allocation working, which is why all of those 
+	registration invocations in your module entry routine should look something like:
+			int result;
+			...
+			result = alloc_chrdev_region(...);
+
+			if (result < 0) {
+				printk(KERN_WARNING "Failed to allocate major/minor numbers");
+				return result;
+			}
+		For the time being, though, you can get away with being lazy and just assuming that allocating those numbers will always 
+	work.
+
+				Bonus exercise for the truly ambitious
+		If you're feeling ambitious, you can try the following and see if it works, but it's not required to continue on in the 
+	course so don't worry if you decide to pass on it.
+
+		Consider the simple act of listing the /proc/devices file to see the character drivers that are currently registered with 
+	the system:
+			$ cat /proc/devices
+			Character devices:
+				1 mem
+				4 /dev/vc/0
+				4 tty
+				4 ttyS
+				5 /dev/tty
+				5 /dev/console
+				5 /dev/ptmx
+				6 lp
+				7 vcs
+				... snip ...
+		Note that all that's listed is the driver name and the major device number, not the minor device number(s), which might be
+	useful information, so let's do something about that.
+		First, let's examine where all that output is generated, and that would be in the kernel source file fs/proc/devices.c, 
+	particularly this snippet:
+			static int devinfo_show(struct seq_file *f, void *v)
+			{
+				int i = *(loff_t *) v;
+
+				if (i < CHRDEV_MAJOR_HASH_SIZE) {
+					if (i == 0)
+                        seq_printf(f, "Character devices:\n");
+					chrdev_show(f, i);   <-- there
+				}
+		OK, so, even without totally understanding that code, we can see that the information about each loaded character driver 
+	is printed by the chrdev_show() routine, which lives in the source file fs/char_dev.c:
+			void chrdev_show(struct seq_file *f, off_t offset)
+			{
+				struct char_device_struct *cd;
+
+				if (offset < CHRDEV_MAJOR_HASH_SIZE) {
+					mutex_lock(&chrdevs_lock);
+					for (cd = chrdevs[offset]; cd; cd = cd->next)
+                        seq_printf(f, "%3d %s\n", cd->major, cd->name);
+					mutex_unlock(&chrdevs_lock);
+				}
+			}
+		and, clearly, it's that call to seq_printf() that's printing each line -- more specifically, you can see that it's 
+	printing the major number, followed by the driver name, which is of course exactly what you see when you list the 
+	/proc/devices file. So could we print more information there? Sure.
+
+		First, we need to see the layout of the char_device_struct structure that's being referenced and, conveniently, it's just 
+	above that routine in the same file:
+			static struct char_device_struct {
+				struct char_device_struct *next;
+				unsigned int major;
+				unsigned int baseminor;
+				int minorct;
+				char name[64];
+				struct cdev *cdev;              /* will die */
+			} *chrdevs[CHRDEV_MAJOR_HASH_SIZE];
+		and that should tell you everything you need to know -- given the definition of that structure, you're certainly welcome 
+	to enhance that call to seq_printf() to print any additional fields you want per line, so that's your exercise -- modify the 
+	kernel source file fs/char_dev.c, then rebuild a whole new kernel, reboot to it and see the difference when you print the 
+	contents of the /proc/devices file. Is there any potential drawback to doing that?
+	
+		INTERMISSION: Let's talk about linked lists and "container of."
+                And why are we doing this?
+        Given the prevalence of doubly-linked lists in the Linux kernel, it's worth taking a minute and explaining very, very 
+	clearly how those linked lists work since, I guarantee it, if you've never understood it, you're going to be surprised. It's 
+	quite a clever implementation and, as far as I know, was developed specifically for the kernel to clean up the various and 
+	incompatible implementations that were scattered throughout the source. So ... to work.
+        OBLIGATORY TWEAK: I'm sure Linux kernel guru Robert Love will never forgive me for this but when I first encountered his 
+	earlier second edition of "Linux Kernel Development," and read the section where he explained linked lists, I eventually 
+	dropped him a short note along the lines of, "Uh ... no." And I'm happy to say, his 3rd edition now explains it correctly. 
+	That just shows you how different is the implementation.
+        Note: For the remainder of this tutorial and for the sake of brevity, I'll just use the word "list" to refer to a 
+	doubly-linked list. And I'm still not sure this is the best way to explain kernel linked lists but let's see how well this 
+	works.
+        MORE ADDENDUM: Turns out that Love's 3rd edition still isn't totally accurate, and I cover that here
+	(http://www.crashcourse.ca/wiki/index.php/Updates_to_LKD3#Linked_lists). Time for a rewrite of this page, I think.
+
+                What does a list normally look like?
+        Assuming that everyone has at least used a list at one time or another, the standard implementation is fairly 
+	straightforward -- each element in the list is a structure with three fields:
+            *a "next" pointer,
+            *a "prev" pointer, and
+            *some data object to represent the "payload".
+        All of that should be trivially recognizable, and the only variation is normally whether the data payload at each position
+	in the list is defined specifically for a given data type, or whether it's just a generic void* C pointer that points at the 
+	payload.
+		In addition, sitting above the list will be a single pointer that refers to the "head" of the list (or the first element, 
+	depending on how you want to define where the list "begins"), where that pointer will be NULL if the list is currently empty 
+	(has no elements).
+		And, finally, list operations should be obvious -- given the address of a list, you can iterate through the list elements,
+	add and delete elements, and so on. Absolutely nothing exciting here, it should all look familiar. So far, so good?
+
+				So how does the kernel handle this?
+		Kernel linked lists are based primarily on the following simple data structure defined in include/linux/list.h to hold 
+	the elements of a list together:
+			struct list_head {
+				struct list_head *next, *prev;
+			};
+		And now you're thinking -- what the hell? It's a structure with two pointers (forward and back), but where's the payload? 
+	Where's the data? And here's the novelty.
+        Unlike the lists you're used to where the pointers to hold the list together live outside of the data payload you're 
+	tracking, kernel linked lists are implemented by defining that struct list_head structure as part of each payload object that 
+	you want to keep track of, as in:
+            struct my_data {
+                int this;
+                long that;
+                char the_other_thing;
+                struct list_head lh;
+                ... snip ...
+            };
+        So for each object that you want to store on a list, you need to define -- as part of the object itself -- a struct 
+	list_head data member, whose job it is to simply point to the previous and next data objects on the list. Which seems 
+	confusing but let's finish the picture.
+        You're also going to need a global (as in, outside the list) object to refer to the list itself just so you know how to 
+	get to it, and that's also represented by a struct list_head object which starts off being, well, "empty" until you start 
+	adding elements to your list. But what does it mean to initialize your list to be "empty" with that data structure?
+        In that same header file, you see this chunk of code:
+            struct list_head {
+                struct list_head *next, *prev;
+            };
+        #define LIST_HEAD_INIT(name) { &(name), &(name) }
+        #define LIST_HEAD(name) \
+                struct list_head name = LIST_HEAD_INIT(name)
+        static inline void INIT_LIST_HEAD(struct list_head *list)
+        {
+            list->next = list;
+            list->prev = list;
+        }
+		which means that a totally empty list is represented by a struct list_head object, both of whose prev and next pointers 
+	refer to itself. So, in a funny way, even an empty list needs that out-of-list, global object to show that there's nothing on 
+	the list.
+        On the other hand, if the list does contain elements, you could iterate through the list by simply following the pointers 
+	from one list_head structure to the next until you returned to the beginning -- that would represent a full traversal of your 
+	doubly-linked list. But if you're still confused about how you get your data, there's a reason for that.
+
+                How do you get your payload?
+        If you've understood everything so far, the one thing that should still be confusing is that, if you start with the 
+	"beginning" of a list and simply follow pointers, all you're doing is moving from one list_head structure to the next, which 
+	is terrific except that, at each location, what you want is the corresponding data payload. And since you've buried your list 
+	pointers inside your actual data, how do you, in a sense, back out to get the address of the payload? And that's where the 
+	container_of macro comes in, as defined in include/linux/kernel.h:
+
+        /**
+          * container_of - cast a member of a structure out to the containing structure
+          * @ptr:        the pointer to the member.
+          * @type:       the type of the container struct this is embedded in.
+          * @member:     the name of the member within the struct.
+          *
+        */
+        #define container_of(ptr, type, member) ({                      \
+                const typeof( ((type *)0)->member ) *__mptr = (ptr);    \
+                (type *)( (char *)__mptr - offsetof(type,member) );})
+        
+		What the above macro does is, given the address of a structure member, and the name of that member, and the type of the 
+	enclosing structure, it gives you back the address of the enclosing structure. (NOTE to self: probably need to expand on this.
+	Shortly.) For people used to user space C programming, note that that macro is based on the offsetof macro you might have seen
+	before, at which point you're starting to see how this works.
+
+        In order to iterate through a list, you'll start with the list_head structure that represents the list itself. If its prev
+	and next pointers both refer to itself, that represents an empty list and you're done.
+
+        On the other hand, if they're different, that means there's at least one element on the list, so you can do a normal 
+	iteration, following pointers from one struct list_head to the next and, at each step, you need to use container_of() to take 
+	the address of the simple list_head object to get its enclosing payload object, at which point you can do whatever you want 
+	with the payload, then move on to the next element in the list. You're done when you've returned to the "head" of the list.
+
+				Let's summarize
+		In order to pull all this together, let's briefly summarize what just happened so you can appreciate how different is this
+	implementation from what you're used to.
+        *Rather than the standard list implementation where you have data payloads and the pointers keeping track of them living 
+		  outside the payload, the kernel implementation requires you to add prev and next list pointers as part of your payload. 
+		  In short, data objects to be tracked on a list must carry around their own list pointers.
+        *Traversing a list means simply following the list_head pointers from one to the next, at each stage having to determine 
+		  the address of the actual payload object that it's embedded in.
+		*Even an empty list is represented by a single list_head object, both of whose pointers refer to itself.
+        *The list_head instance that represents the head of a list does not represent a payload. In other words, if you have a 
+		list with nine data elements, it will use 10 list_head objects, since the official head of a list is never meant to 
+		represent any actual data -- it's just your starting point.
+
+		        A simple example
+        As an actual example, let's see how all of the Linux kernel tasks are tracked since (unsurprisingly) they're kept on a 
+	list.
+        Consider this snippet from arch/x86/kernel/init_task.c, which defines the very first system task:
+            struct task_struct init_task = INIT_TASK(init_task);
+            EXPORT_SYMBOL(init_task);
+			
+        OK, so that's your very first system task. And what does that have to do with a list? Check out this declaration of the 
+	task_struct structure from include/linux/sched.h, which represents a single task:
+
+            struct task_struct {
+                volatile long state;    /* -1 unrunnable, 0 runnable, >0 stopped */
+                void *stack;
+                atomic_t usage;
+                unsigned int flags;     /* per process flags, defined below */
+                unsigned int ptrace;
+                ... snip ...
+                struct list_head tasks;   <-- there!
+                ... snip ...
+            };
+        As long as I've read this correctly, each existing kernel task has, embedded inside it, a list_head structure that's used 
+	to keep it on the single, kernel-wide, list of task structures. So you could, in kernel space, iterate through every task by 
+	starting at the initial task address, then following the list pointer to the next one until you returned to the beginning.
+
+		Exercise for the reader: I'm fairly sure I've run across an example in the kernel of some code traversing the entire task 
+	list, but I don't recall where I saw it. Anyone? Anyone? Bueller?
+
+				And in conclusion ...
+		I'm fairly sure I can add a couple more sections to this tutorial to make it even better but that will have to wait until 
+	later today. In the meantime, if you think this was useful, feel free to tweet it or link to it or whatever.
+		Later.
+		P.S. Feel free to leave a comment if you have any questions or observations.
+
+				ADDENDUM: Some additional observations
+		A couple more things about the consequences of how the kernel implements linked lists.
+		First, there is a massive collection of macros and inline routines that simplify linked list usage, testing and traversal 
+	in the kernel header file include/linux/list.h. For example:
+			static inline int list_empty(const struct list_head *head)
+			{
+				return head->next == head;
+			}
+		That's clearly a routine that tests whether a linked list is empty, and you can see that "empty" is defined as whether 
+	that list_head "head" pointer points to itself. By definition, that means there are no list entries.
+
+		Other macros and routines make traversal easy, such as:
+			#define list_entry(ptr, type, member) \
+					container_of(ptr, type, member)
+
+			define list_for_each(pos, head) \
+					for (pos = (head)->next; prefetch(pos->next), pos != (head); \
+						pos = pos->next)
+		and so on. If you want to see how common linked list usage is in the drivers/ directory:
+				$ grep -rw list_for_each_entry drivers | wc -l
+				1981
+				$
+		so, clearly, this is how almost everyone implements their linked lists.
+
+		Another observation that is obvious once it's pointed out is that any data object or payload that you want to track on a 
+	list must explicitly define an internal list_head object for that list. More to the point, a payload is welcome to participate
+	on several lists, but only after defining an internal list_head object for each list. In other words, unlike the payloads 
+	you're used to that contain only pure data and could (theoretically) be on an infinite number of lists at once, objects on 
+	kernel lists can be only on those lists for which they have an internal set of links. It's an interesting way to lock down 
+	what lists you're willing to be a member of.
+
+		And it should be obvious that the above design, while initially looking a bit strange, gives you a single, simple 
+	implementation that is usable by everyone.
+
+        Finally, there's some rationale for the design here.
+
+        I'm sure I can go back and tidy up this presentation even further but this should be sufficient for now. Again, there's a 
+	comments section below if you want to leave a note.
+	
+	    LESSON 18: The simplest possible character device driver you can write
+                A quick recap, and where we're going from here
+        Recall that, back in Lesson 17, we wrote, compiled and loaded an astonishingly trivial character device driver that did, 
+	well, nothing of any value as far as character drivers are concerned. All it did was request a major device number at which to
+	live in kernel space, and register one or more minor device numbers, the result of which you could see in user space by 
+	listing the contents of the /proc/devices file. And then you unloaded it. And that was it.
+
+        In this lesson, we're going to add just enough to our character driver so that we can "read" from it. And by "read," I 
+	mean that we'll be able to run a command like:
+            $ cat /dev/mychardrv
+    and have that command actually generate whatever you decide represents the "output" of the driver from kernel space.
+
+        And as an alternative, this "reading" functionality should also extend to doing that from within a simple C program, where
+	you could open that same device file for reading and, well, read from it. Both of these operations will be implemented simply 
+	by adding read functionality to our character driver, so let's get to it.
+
+        NOTE: A lot of this is covered in considerable detail in the online book "Linux Device Drivers (3rd ed)", specifically in 
+	Chapter 3, but I'm going to take a slightly different approach and start by designing and implementing the simplest character 
+	driver imaginable.
+
+                Getting access to your character driver from user space
+        Recall that, in order to have a working (and accessible) character driver, you need to do two things:
+            *Write, build and load a module that registers itself at a major device and one or more minor device numbers in kernel
+			 space, and
+            *For now, manually create the corresponding special device file(s) in user space through which you'll talk to your 
+			 driver.
+        In other words, once you load your driver module and check /proc/devices to see where it ended up in terms of its major 
+	device number, it will be your responsibility to run the appropriate mknod command to create the corresponding device file, 
+	such as:
+            $ sudo mknod /dev/victoryismine c 250 0  [if 250 is major number]
+        Without a special device file that matches your loaded driver, there's nothing you can do in terms of accessing it, and 
+	note well that the name of your device file doesn't have to match any other name you've used until now -- all that matters is 
+	that it's created as a "c"haracter file, with the matching major and minor number. You're free to use whatever name you want.
+
+        Not surprisingly, if you choose to register a driver that allocates several minor device numbers, you'll need to create a 
+	separate device file for each minor number if you want them to be treated separately, but let's keep it simple for now -- one 
+	minor number. We'll be covering how to support multiple minor numbers in a later lesson.
+
+                Defining your driver's file operations
+        It's entirely up to you to decide how much file functionality you want to build into your character driver, and you do 
+	that by declaring a struct file_operations in your module, and filling in the code for whatever operations you want your 
+	driver to support. From the kernel header file include/linux/fs.h, we have the declaration (where you can see how many 
+	different file operations you can define for your driver):
+            struct file_operations {
+              struct module *owner;
+              loff_t (*llseek) (struct file *, loff_t, int);
+              ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);
+              ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
+              ssize_t (*aio_read) (struct kiocb *, const struct iovec *, unsigned long, loff_t);
+              ssize_t (*aio_write) (struct kiocb *, const struct iovec *, unsigned long, loff_t);
+              int (*readdir) (struct file *, void *, filldir_t);
+              unsigned int (*poll) (struct file *, struct poll_table_struct *);
+              int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);
+              ... snip ...
+            };
+        This should remind you of when you implemented file operations for a proc file -- for each operation you want to support 
+	in your character driver, you'll need to write and associate the corresponding, kernel space file operation routine. But, 
+	again, we'll keep it short and do as little as possible -- we'll define simply what it means to "read."
+
+                Let's talk about struct cdev
+        Here's where you actually register your loadable module as a character driver in the kernel, and you do that by defining a
+	struct cdev structure, filling it in appropriately, and calling a routine that registers your driver with the kernel based on 
+	the information you filled in.
+
+        From the kernel header file include/linux/cdev.h, here's the structure:
+            struct cdev {
+                struct kobject kobj;
+                struct module *owner;
+                const struct file_operations *ops;
+                struct list_head list;
+                dev_t dev;
+                unsigned int count;
+            };
+        Most of the above should actually be self-explanatory -- before you register your character driver with the kernel, you 
+	need to declare an instance of the above structure, and fill it in with the corresponding values:
+        *owner should be assigned the standard macro "THIS_MODULE",
+        *ops should be set to refer to your file operations structure, where you've defined which file operations you're supporting,
+        *dev should be set to the device structure defining the major and minor number to be used, and
+        *count should be set to the number of minor device numbers to associate with your driver (again, in our simple case, one).
+        You'll see all this happening shortly when we get into the sample driver, where you'll see that you register your 
+	character driver by calling cdev_init(), and deregister it by calling cdev_del(). And, finally, the most important bit of code
+	you'll have to write -- what it means to "read" from your driver.
+
+                Defining the read() routine
+        The easiest way to do this is just show an example of a read routine and walk through the code. Here's the one we're going
+	to use, which is an admittedly trivial and contrived example but demonstrates all of the basic principles:
+
+            static char output[] = "Victory is mine!\n";
+
+            ssize_t
+            my_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
+            {
+                printk(KERN_INFO "In chardrv read routine.\n");
+                printk(KERN_INFO "Count field is %lu.\n", count);
+                printk(KERN_INFO "Offset is %lu.\n", *f_pos);
+
+                if (output[*f_pos] == '\0') {
+                    printk(KERN_INFO "End of string, returning zero.\n");
+                    return 0;
+                }
+
+                copy_to_user(buf, &output[*f_pos], 1);
+                *f_pos += 1;
+                return 1;  // returned a single character
+            }
+        Quite simply, when you try to "read" from your driver from user space, this corresponds to invoking (in kernel space) 
+	whatever routine you defined as your driver's read routine, which then passes/copies back to user space the result of the 
+	"read." Now let's figure out what all that code up there is doing.
+
+        As sample output from our driver, the static character string output represents what I want to return when someone tries 
+	to read from the device file for this driver ("Victory is mine!\n"), so all you'll be getting back is a short character string,
+	time and time again. But let's see how that read routine actually works by explaining each parameter one at a time:
+        *filp: Ignore that argument to the read routine -- we don't need it in our example but we'll be coming back to it in a 
+		 later lesson. For now, just leave it alone.
+        *buf: A character pointer back to user space, and it's where you'll copy the data you want "read" by the user. In short, 
+		 it's where you copy the "output" of the driver. More on this shortly.
+        *count: The size of the user space buffer that's available to you, so if you're trying to pass back more than that number of 
+		 bytes, well, you can't. You have to limit yourself to that as a maximum copy size, but don't worry as you'll be called enough 
+		 times to pass back that maximum number of bytes until you're done.
+        *f_pos: An "offset" value that is available to you to keep track of how much data you've passed back and which you can 
+		check on each subsequent call to the read routine to determine where to pick up where you left off.
+        
+		But let's talk about that last argument a bit more.
+
+        Given that you might be trying to return far more data during a "read" operation than can fit in the buffer you've been 
+	handed by user space, you'll have to return all that data a chunk at a time, and you'll be called continuously until you 
+	specify that that's all the data you have and you return an EOF marker.
+
+        But in order to keep track of how much data you've already returned, you're supplied with the address of that offset 
+	variable and, right after you copy another chunk of data into the buffer, you should increment that offset by whatever is an 
+	appropriate value. So what's an appropriate value? That depends.
+
+        It's entirely up to you to decide how to interpret whatever value you put in there. In a simple case, maybe it's the byte 
+	offset, that's pretty typical. On the other hand, if you're passing back strict 1024-byte blocks, you might simply set the 
+	offset value to the block number -- 1, 2, 3, 4 and so on. There's no restriction on how you define that offset value -- all 
+	that's important is that you know what it means and can use its value to calculate where to pick up where you left off during 
+	the next read call. And on that note, let's dissect our read routine a bit at a time.
+            static char output[] = "Victory is mine!\n";
+        That's the string I'll be passing back. Next, the opening of the routine:
+		
+            ssize_t
+            my_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
+            {
+                printk(KERN_INFO "In chardrv read routine.\n");
+                printk(KERN_INFO "Count field is %lu.\n", count);
+                printk(KERN_INFO "Offset is %lu.\n", *f_pos);
+        Just some debugging so I can watch what's happening in /var/log/messages.
+
+        Moving on, how do I know when I have no more data left to pass back? In my case, when I hit the end-of-string null byte:
+            if (output[*f_pos] == '\0') {
+                printk(KERN_INFO "End of string, returning zero.\n");
+                return 0;  // EOF indicator
+            }
+        And, finally, I'm going to make this read routine as inefficient as possible by passing back a single character at a time 
+	during each read operation:
+            copy_to_user(buf, &output[*f_pos], 1);
+            *f_pos += 1;
+            return 1;  // returned a single character
+        This is grossly resource-inefficient, of course, but it demonstrates the principle of being called repeatedly until you 
+	are out of data. And now, let's pull all this together.
+
+                Our character driver, from beginning to end
+        The final form of this driver file is attached, and we can skim over the parts we already know and touch on just the new 
+	content. First, there's this:
+            static dev_t mydev
+        That is, of course, the kernel typedef that represents the (major,minor) combination identifying a device.
+
+        Next, there's the read routine that we've already covered in detail, so we can jump over that.
+
+        And then there's what we need to register our character device:
+            struct cdev my_cdev;
+            struct file_operations my_fops = {
+                .owner = THIS_MODULE,
+                .read = my_read,
+            };
+
+            static int __init chardrv_in(void)
+            {
+                printk(KERN_INFO "module chardrv being loaded.\n");
+
+                alloc_chrdev_region(&mydev, 0, 1, "rday");
+                printk(KERN_INFO "%s\n", format_dev_t(buffer, mydev));
+
+                cdev_init(&my_cdev, &my_fops);
+                my_cdev.owner = THIS_MODULE;
+                cdev_add(&my_cdev, mydev, 1);
+
+                return 0;
+            }
+        As you can see, I'll need a struct cdev, I'll need an instance of file operations where I can define that my device 
+	supports only a read operation and, finally, in the module entry routine, you can see how I register for a major and minor 
+	device number and, given what I get back, I create and register as a character driver with a single minor number. And given 
+	all that, the exit routine shouldn't be a surprise:
+            static void __exit chardrv_out(void)
+            {
+                printk(KERN_INFO "module chardrv being unloaded.\n");
+
+                cdev_del(&my_cdev);
+                unregister_chrdev_region(mydev, 1);
+            }
+        And now, the moment of truth.
+
+                Run that baby!
+        At this point, you're ready to test your new driver. First, build and load your new driver, at which point you can verify 
+	it's been loaded by checking /var/log/messages:
+            ... module chardrv being loaded.
+            ... 250:0
+        and make sure it's visible in /proc/devices:
+            $ cat /proc/devices
+                ...
+                250 rday
+                ...
+        So far, so good -- my character driver appears to be loaded and running.
+
+        The next step is to create the device file corresponding to your driver (and, again, you can use whatever name you want 
+	for the special device file -- all that matters is that you define it as a character device file with the matching major and 
+	minor number):
+            $ sudo mknod /dev/victory c 250 0  [or whatever number works for you]
+        And, finally, try to "read" from that device file:
+            $ cat /dev/victory
+                Victory is mine!
+            $
+And, while you're at it, you can see what's scrolling by in /var/log/messages:
+            Jul 17 11:50:04 lynx kernel: [83719.785314] module chardrv being loaded.
+            Jul 17 11:50:04 lynx kernel: [83719.785321] 250:0
+            Jul 17 11:51:44 lynx kernel: [83819.954592] In chardrv read routine.
+            Jul 17 11:51:44 lynx kernel: [83819.954598] Count field is 32768.
+            Jul 17 11:51:44 lynx kernel: [83819.954601] Offset is 0.
+            Jul 17 11:51:44 lynx kernel: [83819.954615] In chardrv read routine.
+            Jul 17 11:51:44 lynx kernel: [83819.954618] Count field is 32768.
+            Jul 17 11:51:44 lynx kernel: [83819.954621] Offset is 1.
+            Jul 17 11:51:44 lynx kernel: [83819.954626] In chardrv read routine.
+            Jul 17 11:51:44 lynx kernel: [83819.954629] Count field is 32768.
+            Jul 17 11:51:44 lynx kernel: [83819.954632] Offset is 2.
+            ... snip ...
+            Jul 17 11:51:44 lynx kernel: [83819.954778] In chardrv read routine.
+            Jul 17 11:51:44 lynx kernel: [83819.954781] Count field is 32768.
+            Jul 17 11:51:44 lynx kernel: [83819.954783] Offset is 17.
+            Jul 17 11:51:44 lynx kernel: [83819.954786] End of string, returning zero.
+        And that's it. Feel free to list that device file as many times as you want, and you'll see you get the same results each 
+	time.
+
+		NOTE: If you examine the read routine, you'll notice that the test for when we have no more data to pass back is checking 
+	for the null byte that represents the end of a standard C character string. And note well that that null byte is not part of 
+	the data being passed back:
+			if (output[*f_pos] == '\0') {
+				printk(KERN_INFO "End of string, returning zero.\n");
+				return 0;  // EOF indicator
+			}
+		This is simply emphasizing that it's up to you to decide precisely what represents the data being "read" from kernel space,
+	and whether that data contains terminating null bytes of end-of-line characters is your decision.
+
+				Exercises for the student
+		Given how primitive our first character driver is, we can try a number of enhancements; some simple, some a bit trickier. 
+	I suggest you make a copy of your working driver, and do all of the following exercises on a throw-away copy.
+
+		Exercise 1: Your first driver explicitly allocated and registered a single minor device number (in our case, zero). Extend
+	your driver to allocate a number of minor numbers (say, 64), then rebuild and reload your driver, then test by creating some 
+	new device files and verify that you can still access your driver through any of those minor numbers.
+
+		For the time being, we're not going to distinguish between between minor numbers when our driver's read() routine is 
+	called. We'll do that in a later lesson. For now, just verify that using any valid minor number gets you to the same place -- 
+	your driver's read routine -- and that the output is identical for all of those minor numbers.
+
+		Exercise 2: Note how we were incredibly inefficient in our original driver in that we passed back only a single character 
+	during every read operation. Since the string we're "returning" is fairly short, modify your driver to pass back the entire 
+	string in a single copy operation to user space. How will you need to modify the rest of your driver?
+
+		Assuming you'll want to calculate the length of the output string, you can do that by including the kernel header file 
+	include/linux/string.h, and using the kernel library routine strlen().
+
+		Exercise 3: If you're feeling ambitious, and you've verified that you can "read" from your character driver at the command
+	line, feel free to write a C program that opens that device file for reading and check that you can read from it identically 
+	from a C program.
+
+				So what can possibly go wrong?
+		Note that we're doing very little error checking in our sample driver above, which is fine for experimentation but 
+	probably not so smart for production-level code. We should at least check the return codes on a couple of our kernel routine 
+	calls to make sure everything is proceeding properly.
+
+		First, it's a good idea to verify that we allocated our major and minor device number(s):
+			int res;
+			...
+			res = alloc_chrdev_region(&mydev, 0, 1, "rday");
+			if (res < 0) {
+				printk(KERN_WARNING
+					"Uh oh ... couldn't allocate major and minor number(s).\n");
+			return res;
+			}
+		Until now, we've simply assumed our call to alloc_chrdev_region() always worked and, for the most part, that's a safe 
+	assumption, but it never hurts to check.
+
+		Next, you might check the return code from registering your cdev struct with the kernel, as in:
+			int cdev_res;
+			...
+			cdev_res = cdev_add(&my_cdev, mydev, 1);
+			if (cdev_res < 0) {
+			... uh oh again ...
+		Finally, we can error check our call to copy_to_user to make sure our kernel space data was copied back to the user space 
+	buffer properly:
+			if (copy_to_user(...) > 0) {
+				return -EFAULT;
+			}
+		What's happening up there is that, when you invoke copy_to_user(), all of the data you're trying to copy back to user 
+	space should be copied, and what is returned by that call is the amount of data still to be copied from that operation. 
+	Ideally, that copy routine should have worked and each of those calls should return zero. If the returned value is non-zero, 
+	something went wrong.
+
+		Exercise for the student: Feel free to add as much of the error checking above to your driver as you wish.
+
+		In addition, if you're feeling ambitious, you can see how much of this is implemented in the kernel source file 
+	fs/char_dev.c.
+
+		Appendix:(chardrv.c)
+			#include <linux/module.h>
+			#include <linux/init.h>
+			#include <linux/kernel.h>
+
+			#include <linux/types.h>    // for dev_t typedef
+			#include <linux/kdev_t.h>   // for format_dev_t
+			#include <linux/fs.h>       // for alloc_chrdev_region()
+			#include <linux/cdev.h>     // for "struct cdev"
+			#include <asm/uaccess.h>    // for user/kernel space copy routines
+
+			static dev_t mydev;
+			static char buffer[64];
+
+			static char output[] = "Victory is mine!\n";
+
+			ssize_t
+			my_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
+			{
+				printk(KERN_INFO "In chardrv read routine.\n");
+				printk(KERN_INFO "Count field is %lu.\n", count);
+				printk(KERN_INFO "Offset is %lu.\n", *f_pos);
+
+				if (output[*f_pos] == '\0') {
+					printk(KERN_INFO "End of string, returning zero.\n");
+					return 0;
+				}
+
+				copy_to_user(buf, &output[*f_pos], 1);
+				*f_pos += 1;
+				return 1;  // returned a single character
+			}
+
+			struct cdev my_cdev;
+
+			struct file_operations my_fops = {
+				.owner = THIS_MODULE,
+				.read = my_read,
+			};
+
+			static int __init chardrv_in(void)
+			{
+				printk(KERN_INFO "module chardrv being loaded.\n");
+
+				alloc_chrdev_region(&mydev, 0, 1, "rday");
+				printk(KERN_INFO "%s\n", format_dev_t(buffer, mydev));
+
+				cdev_init(&my_cdev, &my_fops);
+				my_cdev.owner = THIS_MODULE;
+				cdev_add(&my_cdev, mydev, 1);
+
+				return 0;
+			}
+
+			static void __exit chardrv_out(void)
+			{
+				printk(KERN_INFO "module chardrv being unloaded.\n");
+
+				cdev_del(&my_cdev);
+				unregister_chrdev_region(mydev, 1);
+			}
+
+			module_init(chardrv_in);
+			module_exit(chardrv_out);
+
+			MODULE_AUTHOR("Yan Xu");
+			MODULE_LICENSE("GPL");
+	
